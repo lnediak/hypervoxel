@@ -1,0 +1,31 @@
+// AUTO-GENERATED FILE: DO NOT MODIFY
+R"OPENCLPP(
+END; hello world END;
+hi0hi ye. 
+HI0hi0 bob  eyey 
+
+REPEATEND; END; 1
+.
+
+END; hello world END;
+hi0hi ye. hi1hi ye. 
+HI0hi0 HI0hi1 bob HI1hi0 HI1hi1 bob  eyey 
+
+REPEATEND; END; 2
+.
+
+END; hello world END;
+hi0hi ye. hi1hi ye. hi2hi ye. 
+HI0hi0 HI0hi1 HI0hi2 bob HI1hi0 HI1hi1 HI1hi2 bob HI2hi0 HI2hi1 HI2hi2 bob  eyey 
+
+REPEATEND; END; 3
+.
+
+END; hello world END;
+hi0hi ye. hi1hi ye. hi2hi ye. hi3hi ye. 
+HI0hi0 HI0hi1 HI0hi2 HI0hi3 bob HI1hi0 HI1hi1 HI1hi2 HI1hi3 bob HI2hi0 HI2hi1 HI2hi2 HI2hi3 bob HI3hi0 HI3hi1 HI3hi2 HI3hi3 bob  eyey 
+
+REPEATEND; END; 4
+.
+
+)OPENCLPP"

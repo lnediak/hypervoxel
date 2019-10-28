@@ -1,0 +1,5 @@
+*.o
+preprocess/pp
+renderer/test_cl
+renderer/out.png
+
