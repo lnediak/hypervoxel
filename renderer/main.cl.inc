@@ -10,7 +10,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -18,11 +18,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -81,6 +76,48 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntry3 {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+   float middle0;
+  float farEnd0;
+   float middle1;
+  float farEnd1;
+   float middle2;
+  float farEnd2;
+  
+} StackEntry3;
+
+void makeChild3(const StackEntry3 *parent, size_t index,
+                      StackEntry3 *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+   child->middle0 =
+      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
+      (((index & (1 << 0)) >> 0) ^
+       (parent->farEnd0 < parent->middle0)) *
+          (parent->farEnd0 - parent->middle0);
+  child->farEnd0 =
+      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
+   child->middle1 =
+      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
+      (((index & (1 << 1)) >> 1) ^
+       (parent->farEnd1 < parent->middle1)) *
+          (parent->farEnd1 - parent->middle1);
+  child->farEnd1 =
+      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
+   child->middle2 =
+      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
+      (((index & (1 << 2)) >> 2) ^
+       (parent->farEnd2 < parent->middle2)) *
+          (parent->farEnd2 - parent->middle2);
+  child->farEnd2 =
+      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
+  
+}
+
 bool traverseOctree3(__global uint *octree,
                             float pos0, float dir0,
                            float invdir0,  float pos1, float dir1,
@@ -95,7 +132,7 @@ bool traverseOctree3(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
    float t00 = (origin0 - pos0) * invdir0;
   float t10 = (origin0 + sidelength - pos0) * invdir0;
@@ -114,28 +151,16 @@ bool traverseOctree3(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
    float currPos0 = pos0 + currDist * dir0;
    float currPos1 = pos1 + currDist * dir1;
    float currPos2 = pos2 + currDist * dir2;
   
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-     float middle0;
-    float farEnd0;
-     float middle1;
-    float farEnd1;
-     float middle2;
-    float farEnd2;
-    
-  } stack[64];
+  StackEntry3 stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntry3 baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
    baseEntry.middle0 = origin0 + sidelength / 2;
   baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
@@ -145,135 +170,76 @@ bool traverseOctree3(__global uint *octree,
   baseEntry.farEnd2 = origin2 + (invdir2 > 0) * sidelength;
   
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info:  entry.middle0: %f, "
-             "entry.farEnd0: %f, currPos0: %f\n  entry.middle1: %f, "
-             "entry.farEnd1: %f, currPos1: %f\n  entry.middle2: %f, "
-             "entry.farEnd2: %f, currPos2: %f\n ",
-              entry.middle0, entry.farEnd0, currPos0,
-              entry.middle1, entry.farEnd1, currPos1,
-              entry.middle2, entry.farEnd2, currPos2,
-             
-             0);
-    }
-    if (entry.processed) {
+    StackEntry3 entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
+      }
       float minStep = FLT_MAX;
-      float val1, val2;
-       val1 = (entry.middle0 - currPos0) * invdir0;
-      val2 = (entry.farEnd0 - currPos0) * invdir0;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle1 - currPos1) * invdir1;
-      val2 = (entry.farEnd1 - currPos1) * invdir1;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle2 - currPos2) * invdir2;
-      val2 = (entry.farEnd2 - currPos2) * invdir2;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
+       minStep =
+          min(minStep, (entry.farEnd0 - currPos0) * invdir0);
+       minStep =
+          min(minStep, (entry.farEnd1 - currPos1) * invdir1);
+       minStep =
+          min(minStep, (entry.farEnd2 - currPos2) * invdir2);
       
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-       currPos0 = pos0 + currDist * dir0;
-      if (debug)
-        printf("currPos0: %f\n", currPos0);
-       currPos1 = pos1 + currDist * dir1;
-      if (debug)
-        printf("currPos1: %f\n", currPos1);
-       currPos2 = pos2 + currDist * dir2;
-      if (debug)
-        printf("currPos2: %f\n", currPos2);
-      
-      if ((entry.farEnd0 - currPos0) * invdir0 < 0 ||
-              (entry.farEnd1 - currPos1) * invdir1 < 0 ||
-              (entry.farEnd2 - currPos2) * invdir2 < 0 ||
-              
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+       currPos0 = pos0 + currDist * dir0;
+       currPos1 = pos1 + currDist * dir1;
+       currPos2 = pos2 + currDist * dir2;
+      
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | 
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (((entry.farEnd0 - currPos0) * invdir0 >
+                               0) &&
+                ((entry.farEnd1 - currPos1) * invdir1 >
+                               0) &&
+                ((entry.farEnd2 - currPos2) * invdir2 >
+                               0) &&
+                
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | 
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-         child.middle0 =
-            1.5 * entry.middle0 - 0.5 * entry.farEnd0 +
-            (((entry.index & (1 << 0)) >> 0) ^ (invdir0 < 0)) *
-                (entry.farEnd0 - entry.middle0);
-        child.farEnd0 =
-            child.middle0 + (entry.farEnd0 - entry.middle0) / 2;
-         child.middle1 =
-            1.5 * entry.middle1 - 0.5 * entry.farEnd1 +
-            (((entry.index & (1 << 1)) >> 1) ^ (invdir1 < 0)) *
-                (entry.farEnd1 - entry.middle1);
-        child.farEnd1 =
-            child.middle1 + (entry.farEnd1 - entry.middle1) / 2;
-         child.middle2 =
-            1.5 * entry.middle2 - 0.5 * entry.farEnd2 +
-            (((entry.index & (1 << 2)) >> 2) ^ (invdir2 < 0)) *
-                (entry.farEnd2 - entry.middle2);
-        child.farEnd2 =
-            child.middle2 + (entry.farEnd2 - entry.middle2) / 2;
+        StackEntry3 child;
+         if ((1 << 0) & diffIndex) {
+          makeChild3(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 0);
+        }
+         if ((1 << 1) & diffIndex) {
+          makeChild3(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 1);
+        }
+         if ((1 << 2) & diffIndex) {
+          makeChild3(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 2);
+        }
         
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntry3 child;
+      makeChild3(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -284,7 +250,7 @@ bool rayBBox3( float pos0, float invdir0,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
    float t00 = (min0 - pos0) * invdir0;
@@ -308,25 +274,18 @@ bool traverseBVH3(__global uint *bvh,  float pos0,
                         float dir1, float invdir1,  float pos2,
                         float dir2, float invdir2, 
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[3];
    invdirArr[0] = invdir0;
    invdirArr[1] = invdir1;
    invdirArr[2] = invdir2;
   
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-     printf("invdir0: %f\n", invdir0);
-     printf("invdir1: %f\n", invdir1);
-     printf("invdir2: %f\n", invdir2);
-    
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVH3: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
      float min0 = *floatBVH++;
@@ -338,14 +297,10 @@ bool traverseBVH3(__global uint *bvh,  float pos0,
     
     if (!rayBBox3(
              pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctree3\n");
       if (traverseOctree3(currBvh + *currBvh,  pos0,
                                 dir0, invdir0,  pos1,
                                 dir1, invdir1,  pos2,
@@ -370,8 +325,6 @@ bool traverseBVH3(__global uint *bvh,  float pos0,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVH3\n\n\n\n\n");
   return false;
 }
 
@@ -379,14 +332,16 @@ __kernel void renderStd3(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
    float pos0 = pos[0];
   float dir0 = forward[0] + xoff * right[0] + yoff * up[0];
    float pos1 = pos[1];
@@ -399,7 +354,7 @@ __kernel void renderStd3(__global uint *bvh, __global float *pos,
    norm += dir1 * dir1;
    norm += dir2 * dir2;
   
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);
@@ -427,7 +382,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -435,11 +390,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -498,6 +448,57 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntry4 {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+   float middle0;
+  float farEnd0;
+   float middle1;
+  float farEnd1;
+   float middle2;
+  float farEnd2;
+   float middle3;
+  float farEnd3;
+  
+} StackEntry4;
+
+void makeChild4(const StackEntry4 *parent, size_t index,
+                      StackEntry4 *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+   child->middle0 =
+      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
+      (((index & (1 << 0)) >> 0) ^
+       (parent->farEnd0 < parent->middle0)) *
+          (parent->farEnd0 - parent->middle0);
+  child->farEnd0 =
+      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
+   child->middle1 =
+      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
+      (((index & (1 << 1)) >> 1) ^
+       (parent->farEnd1 < parent->middle1)) *
+          (parent->farEnd1 - parent->middle1);
+  child->farEnd1 =
+      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
+   child->middle2 =
+      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
+      (((index & (1 << 2)) >> 2) ^
+       (parent->farEnd2 < parent->middle2)) *
+          (parent->farEnd2 - parent->middle2);
+  child->farEnd2 =
+      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
+   child->middle3 =
+      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
+      (((index & (1 << 3)) >> 3) ^
+       (parent->farEnd3 < parent->middle3)) *
+          (parent->farEnd3 - parent->middle3);
+  child->farEnd3 =
+      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
+  
+}
+
 bool traverseOctree4(__global uint *octree,
                             float pos0, float dir0,
                            float invdir0,  float pos1, float dir1,
@@ -514,7 +515,7 @@ bool traverseOctree4(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
    float t00 = (origin0 - pos0) * invdir0;
   float t10 = (origin0 + sidelength - pos0) * invdir0;
@@ -537,31 +538,17 @@ bool traverseOctree4(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
    float currPos0 = pos0 + currDist * dir0;
    float currPos1 = pos1 + currDist * dir1;
    float currPos2 = pos2 + currDist * dir2;
    float currPos3 = pos3 + currDist * dir3;
   
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-     float middle0;
-    float farEnd0;
-     float middle1;
-    float farEnd1;
-     float middle2;
-    float farEnd2;
-     float middle3;
-    float farEnd3;
-    
-  } stack[64];
+  StackEntry4 stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntry4 baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
    baseEntry.middle0 = origin0 + sidelength / 2;
   baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
@@ -573,158 +560,86 @@ bool traverseOctree4(__global uint *octree,
   baseEntry.farEnd3 = origin3 + (invdir3 > 0) * sidelength;
   
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info:  entry.middle0: %f, "
-             "entry.farEnd0: %f, currPos0: %f\n  entry.middle1: %f, "
-             "entry.farEnd1: %f, currPos1: %f\n  entry.middle2: %f, "
-             "entry.farEnd2: %f, currPos2: %f\n  entry.middle3: %f, "
-             "entry.farEnd3: %f, currPos3: %f\n ",
-              entry.middle0, entry.farEnd0, currPos0,
-              entry.middle1, entry.farEnd1, currPos1,
-              entry.middle2, entry.farEnd2, currPos2,
-              entry.middle3, entry.farEnd3, currPos3,
-             
-             0);
-    }
-    if (entry.processed) {
+    StackEntry4 entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
+      }
       float minStep = FLT_MAX;
-      float val1, val2;
-       val1 = (entry.middle0 - currPos0) * invdir0;
-      val2 = (entry.farEnd0 - currPos0) * invdir0;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle1 - currPos1) * invdir1;
-      val2 = (entry.farEnd1 - currPos1) * invdir1;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle2 - currPos2) * invdir2;
-      val2 = (entry.farEnd2 - currPos2) * invdir2;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle3 - currPos3) * invdir3;
-      val2 = (entry.farEnd3 - currPos3) * invdir3;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
+       minStep =
+          min(minStep, (entry.farEnd0 - currPos0) * invdir0);
+       minStep =
+          min(minStep, (entry.farEnd1 - currPos1) * invdir1);
+       minStep =
+          min(minStep, (entry.farEnd2 - currPos2) * invdir2);
+       minStep =
+          min(minStep, (entry.farEnd3 - currPos3) * invdir3);
       
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-       currPos0 = pos0 + currDist * dir0;
-      if (debug)
-        printf("currPos0: %f\n", currPos0);
-       currPos1 = pos1 + currDist * dir1;
-      if (debug)
-        printf("currPos1: %f\n", currPos1);
-       currPos2 = pos2 + currDist * dir2;
-      if (debug)
-        printf("currPos2: %f\n", currPos2);
-       currPos3 = pos3 + currDist * dir3;
-      if (debug)
-        printf("currPos3: %f\n", currPos3);
-      
-      if ((entry.farEnd0 - currPos0) * invdir0 < 0 ||
-              (entry.farEnd1 - currPos1) * invdir1 < 0 ||
-              (entry.farEnd2 - currPos2) * invdir2 < 0 ||
-              (entry.farEnd3 - currPos3) * invdir3 < 0 ||
-              
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+       currPos0 = pos0 + currDist * dir0;
+       currPos1 = pos1 + currDist * dir1;
+       currPos2 = pos2 + currDist * dir2;
+       currPos3 = pos3 + currDist * dir3;
+      
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | 
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (((entry.farEnd0 - currPos0) * invdir0 >
+                               0) &&
+                ((entry.farEnd1 - currPos1) * invdir1 >
+                               0) &&
+                ((entry.farEnd2 - currPos2) * invdir2 >
+                               0) &&
+                ((entry.farEnd3 - currPos3) * invdir3 >
+                               0) &&
+                
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | 
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-         child.middle0 =
-            1.5 * entry.middle0 - 0.5 * entry.farEnd0 +
-            (((entry.index & (1 << 0)) >> 0) ^ (invdir0 < 0)) *
-                (entry.farEnd0 - entry.middle0);
-        child.farEnd0 =
-            child.middle0 + (entry.farEnd0 - entry.middle0) / 2;
-         child.middle1 =
-            1.5 * entry.middle1 - 0.5 * entry.farEnd1 +
-            (((entry.index & (1 << 1)) >> 1) ^ (invdir1 < 0)) *
-                (entry.farEnd1 - entry.middle1);
-        child.farEnd1 =
-            child.middle1 + (entry.farEnd1 - entry.middle1) / 2;
-         child.middle2 =
-            1.5 * entry.middle2 - 0.5 * entry.farEnd2 +
-            (((entry.index & (1 << 2)) >> 2) ^ (invdir2 < 0)) *
-                (entry.farEnd2 - entry.middle2);
-        child.farEnd2 =
-            child.middle2 + (entry.farEnd2 - entry.middle2) / 2;
-         child.middle3 =
-            1.5 * entry.middle3 - 0.5 * entry.farEnd3 +
-            (((entry.index & (1 << 3)) >> 3) ^ (invdir3 < 0)) *
-                (entry.farEnd3 - entry.middle3);
-        child.farEnd3 =
-            child.middle3 + (entry.farEnd3 - entry.middle3) / 2;
+        StackEntry4 child;
+         if ((1 << 0) & diffIndex) {
+          makeChild4(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 0);
+        }
+         if ((1 << 1) & diffIndex) {
+          makeChild4(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 1);
+        }
+         if ((1 << 2) & diffIndex) {
+          makeChild4(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 2);
+        }
+         if ((1 << 3) & diffIndex) {
+          makeChild4(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 3);
+        }
         
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntry4 child;
+      makeChild4(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -736,7 +651,7 @@ bool rayBBox4( float pos0, float invdir0,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
    float t00 = (min0 - pos0) * invdir0;
@@ -765,6 +680,8 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
                         float dir2, float invdir2,  float pos3,
                         float dir3, float invdir3, 
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[4];
    invdirArr[0] = invdir0;
    invdirArr[1] = invdir1;
@@ -772,20 +689,10 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
    invdirArr[3] = invdir3;
   
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-     printf("invdir0: %f\n", invdir0);
-     printf("invdir1: %f\n", invdir1);
-     printf("invdir2: %f\n", invdir2);
-     printf("invdir3: %f\n", invdir3);
-    
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVH4: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
      float min0 = *floatBVH++;
@@ -799,14 +706,10 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
     
     if (!rayBBox4(
              pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctree4\n");
       if (traverseOctree4(currBvh + *currBvh,  pos0,
                                 dir0, invdir0,  pos1,
                                 dir1, invdir1,  pos2,
@@ -832,8 +735,6 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVH4\n\n\n\n\n");
   return false;
 }
 
@@ -841,14 +742,16 @@ __kernel void renderStd4(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
    float pos0 = pos[0];
   float dir0 = forward[0] + xoff * right[0] + yoff * up[0];
    float pos1 = pos[1];
@@ -864,7 +767,7 @@ __kernel void renderStd4(__global uint *bvh, __global float *pos,
    norm += dir2 * dir2;
    norm += dir3 * dir3;
   
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);
@@ -894,7 +797,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -902,11 +805,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -965,6 +863,66 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntry5 {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+   float middle0;
+  float farEnd0;
+   float middle1;
+  float farEnd1;
+   float middle2;
+  float farEnd2;
+   float middle3;
+  float farEnd3;
+   float middle4;
+  float farEnd4;
+  
+} StackEntry5;
+
+void makeChild5(const StackEntry5 *parent, size_t index,
+                      StackEntry5 *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+   child->middle0 =
+      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
+      (((index & (1 << 0)) >> 0) ^
+       (parent->farEnd0 < parent->middle0)) *
+          (parent->farEnd0 - parent->middle0);
+  child->farEnd0 =
+      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
+   child->middle1 =
+      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
+      (((index & (1 << 1)) >> 1) ^
+       (parent->farEnd1 < parent->middle1)) *
+          (parent->farEnd1 - parent->middle1);
+  child->farEnd1 =
+      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
+   child->middle2 =
+      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
+      (((index & (1 << 2)) >> 2) ^
+       (parent->farEnd2 < parent->middle2)) *
+          (parent->farEnd2 - parent->middle2);
+  child->farEnd2 =
+      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
+   child->middle3 =
+      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
+      (((index & (1 << 3)) >> 3) ^
+       (parent->farEnd3 < parent->middle3)) *
+          (parent->farEnd3 - parent->middle3);
+  child->farEnd3 =
+      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
+   child->middle4 =
+      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
+      (((index & (1 << 4)) >> 4) ^
+       (parent->farEnd4 < parent->middle4)) *
+          (parent->farEnd4 - parent->middle4);
+  child->farEnd4 =
+      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
+  
+}
+
 bool traverseOctree5(__global uint *octree,
                             float pos0, float dir0,
                            float invdir0,  float pos1, float dir1,
@@ -983,7 +941,7 @@ bool traverseOctree5(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
    float t00 = (origin0 - pos0) * invdir0;
   float t10 = (origin0 + sidelength - pos0) * invdir0;
@@ -1010,7 +968,7 @@ bool traverseOctree5(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
    float currPos0 = pos0 + currDist * dir0;
    float currPos1 = pos1 + currDist * dir1;
    float currPos2 = pos2 + currDist * dir2;
@@ -1018,26 +976,10 @@ bool traverseOctree5(__global uint *octree,
    float currPos4 = pos4 + currDist * dir4;
   
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-     float middle0;
-    float farEnd0;
-     float middle1;
-    float farEnd1;
-     float middle2;
-    float farEnd2;
-     float middle3;
-    float farEnd3;
-     float middle4;
-    float farEnd4;
-    
-  } stack[64];
+  StackEntry5 stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntry5 baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
    baseEntry.middle0 = origin0 + sidelength / 2;
   baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
@@ -1051,181 +993,96 @@ bool traverseOctree5(__global uint *octree,
   baseEntry.farEnd4 = origin4 + (invdir4 > 0) * sidelength;
   
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info:  entry.middle0: %f, "
-             "entry.farEnd0: %f, currPos0: %f\n  entry.middle1: %f, "
-             "entry.farEnd1: %f, currPos1: %f\n  entry.middle2: %f, "
-             "entry.farEnd2: %f, currPos2: %f\n  entry.middle3: %f, "
-             "entry.farEnd3: %f, currPos3: %f\n  entry.middle4: %f, "
-             "entry.farEnd4: %f, currPos4: %f\n ",
-              entry.middle0, entry.farEnd0, currPos0,
-              entry.middle1, entry.farEnd1, currPos1,
-              entry.middle2, entry.farEnd2, currPos2,
-              entry.middle3, entry.farEnd3, currPos3,
-              entry.middle4, entry.farEnd4, currPos4,
-             
-             0);
-    }
-    if (entry.processed) {
+    StackEntry5 entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
+      }
       float minStep = FLT_MAX;
-      float val1, val2;
-       val1 = (entry.middle0 - currPos0) * invdir0;
-      val2 = (entry.farEnd0 - currPos0) * invdir0;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle1 - currPos1) * invdir1;
-      val2 = (entry.farEnd1 - currPos1) * invdir1;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle2 - currPos2) * invdir2;
-      val2 = (entry.farEnd2 - currPos2) * invdir2;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle3 - currPos3) * invdir3;
-      val2 = (entry.farEnd3 - currPos3) * invdir3;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle4 - currPos4) * invdir4;
-      val2 = (entry.farEnd4 - currPos4) * invdir4;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
+       minStep =
+          min(minStep, (entry.farEnd0 - currPos0) * invdir0);
+       minStep =
+          min(minStep, (entry.farEnd1 - currPos1) * invdir1);
+       minStep =
+          min(minStep, (entry.farEnd2 - currPos2) * invdir2);
+       minStep =
+          min(minStep, (entry.farEnd3 - currPos3) * invdir3);
+       minStep =
+          min(minStep, (entry.farEnd4 - currPos4) * invdir4);
       
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-       currPos0 = pos0 + currDist * dir0;
-      if (debug)
-        printf("currPos0: %f\n", currPos0);
-       currPos1 = pos1 + currDist * dir1;
-      if (debug)
-        printf("currPos1: %f\n", currPos1);
-       currPos2 = pos2 + currDist * dir2;
-      if (debug)
-        printf("currPos2: %f\n", currPos2);
-       currPos3 = pos3 + currDist * dir3;
-      if (debug)
-        printf("currPos3: %f\n", currPos3);
-       currPos4 = pos4 + currDist * dir4;
-      if (debug)
-        printf("currPos4: %f\n", currPos4);
-      
-      if ((entry.farEnd0 - currPos0) * invdir0 < 0 ||
-              (entry.farEnd1 - currPos1) * invdir1 < 0 ||
-              (entry.farEnd2 - currPos2) * invdir2 < 0 ||
-              (entry.farEnd3 - currPos3) * invdir3 < 0 ||
-              (entry.farEnd4 - currPos4) * invdir4 < 0 ||
-              
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+       currPos0 = pos0 + currDist * dir0;
+       currPos1 = pos1 + currDist * dir1;
+       currPos2 = pos2 + currDist * dir2;
+       currPos3 = pos3 + currDist * dir3;
+       currPos4 = pos4 + currDist * dir4;
+      
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | 
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (((entry.farEnd0 - currPos0) * invdir0 >
+                               0) &&
+                ((entry.farEnd1 - currPos1) * invdir1 >
+                               0) &&
+                ((entry.farEnd2 - currPos2) * invdir2 >
+                               0) &&
+                ((entry.farEnd3 - currPos3) * invdir3 >
+                               0) &&
+                ((entry.farEnd4 - currPos4) * invdir4 >
+                               0) &&
+                
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | 
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-         child.middle0 =
-            1.5 * entry.middle0 - 0.5 * entry.farEnd0 +
-            (((entry.index & (1 << 0)) >> 0) ^ (invdir0 < 0)) *
-                (entry.farEnd0 - entry.middle0);
-        child.farEnd0 =
-            child.middle0 + (entry.farEnd0 - entry.middle0) / 2;
-         child.middle1 =
-            1.5 * entry.middle1 - 0.5 * entry.farEnd1 +
-            (((entry.index & (1 << 1)) >> 1) ^ (invdir1 < 0)) *
-                (entry.farEnd1 - entry.middle1);
-        child.farEnd1 =
-            child.middle1 + (entry.farEnd1 - entry.middle1) / 2;
-         child.middle2 =
-            1.5 * entry.middle2 - 0.5 * entry.farEnd2 +
-            (((entry.index & (1 << 2)) >> 2) ^ (invdir2 < 0)) *
-                (entry.farEnd2 - entry.middle2);
-        child.farEnd2 =
-            child.middle2 + (entry.farEnd2 - entry.middle2) / 2;
-         child.middle3 =
-            1.5 * entry.middle3 - 0.5 * entry.farEnd3 +
-            (((entry.index & (1 << 3)) >> 3) ^ (invdir3 < 0)) *
-                (entry.farEnd3 - entry.middle3);
-        child.farEnd3 =
-            child.middle3 + (entry.farEnd3 - entry.middle3) / 2;
-         child.middle4 =
-            1.5 * entry.middle4 - 0.5 * entry.farEnd4 +
-            (((entry.index & (1 << 4)) >> 4) ^ (invdir4 < 0)) *
-                (entry.farEnd4 - entry.middle4);
-        child.farEnd4 =
-            child.middle4 + (entry.farEnd4 - entry.middle4) / 2;
+        StackEntry5 child;
+         if ((1 << 0) & diffIndex) {
+          makeChild5(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 0);
+        }
+         if ((1 << 1) & diffIndex) {
+          makeChild5(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 1);
+        }
+         if ((1 << 2) & diffIndex) {
+          makeChild5(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 2);
+        }
+         if ((1 << 3) & diffIndex) {
+          makeChild5(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 3);
+        }
+         if ((1 << 4) & diffIndex) {
+          makeChild5(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 4);
+        }
         
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntry5 child;
+      makeChild5(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -1238,7 +1095,7 @@ bool rayBBox5( float pos0, float invdir0,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
    float t00 = (min0 - pos0) * invdir0;
@@ -1272,6 +1129,8 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
                         float dir3, float invdir3,  float pos4,
                         float dir4, float invdir4, 
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[5];
    invdirArr[0] = invdir0;
    invdirArr[1] = invdir1;
@@ -1280,21 +1139,10 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
    invdirArr[4] = invdir4;
   
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-     printf("invdir0: %f\n", invdir0);
-     printf("invdir1: %f\n", invdir1);
-     printf("invdir2: %f\n", invdir2);
-     printf("invdir3: %f\n", invdir3);
-     printf("invdir4: %f\n", invdir4);
-    
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVH5: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
      float min0 = *floatBVH++;
@@ -1310,14 +1158,10 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
     
     if (!rayBBox5(
              pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctree5\n");
       if (traverseOctree5(currBvh + *currBvh,  pos0,
                                 dir0, invdir0,  pos1,
                                 dir1, invdir1,  pos2,
@@ -1344,8 +1188,6 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVH5\n\n\n\n\n");
   return false;
 }
 
@@ -1353,14 +1195,16 @@ __kernel void renderStd5(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
    float pos0 = pos[0];
   float dir0 = forward[0] + xoff * right[0] + yoff * up[0];
    float pos1 = pos[1];
@@ -1379,7 +1223,7 @@ __kernel void renderStd5(__global uint *bvh, __global float *pos,
    norm += dir3 * dir3;
    norm += dir4 * dir4;
   
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);
@@ -1411,7 +1255,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -1419,11 +1263,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -1482,6 +1321,75 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntry6 {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+   float middle0;
+  float farEnd0;
+   float middle1;
+  float farEnd1;
+   float middle2;
+  float farEnd2;
+   float middle3;
+  float farEnd3;
+   float middle4;
+  float farEnd4;
+   float middle5;
+  float farEnd5;
+  
+} StackEntry6;
+
+void makeChild6(const StackEntry6 *parent, size_t index,
+                      StackEntry6 *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+   child->middle0 =
+      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
+      (((index & (1 << 0)) >> 0) ^
+       (parent->farEnd0 < parent->middle0)) *
+          (parent->farEnd0 - parent->middle0);
+  child->farEnd0 =
+      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
+   child->middle1 =
+      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
+      (((index & (1 << 1)) >> 1) ^
+       (parent->farEnd1 < parent->middle1)) *
+          (parent->farEnd1 - parent->middle1);
+  child->farEnd1 =
+      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
+   child->middle2 =
+      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
+      (((index & (1 << 2)) >> 2) ^
+       (parent->farEnd2 < parent->middle2)) *
+          (parent->farEnd2 - parent->middle2);
+  child->farEnd2 =
+      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
+   child->middle3 =
+      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
+      (((index & (1 << 3)) >> 3) ^
+       (parent->farEnd3 < parent->middle3)) *
+          (parent->farEnd3 - parent->middle3);
+  child->farEnd3 =
+      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
+   child->middle4 =
+      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
+      (((index & (1 << 4)) >> 4) ^
+       (parent->farEnd4 < parent->middle4)) *
+          (parent->farEnd4 - parent->middle4);
+  child->farEnd4 =
+      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
+   child->middle5 =
+      1.5f * parent->middle5 - 0.5f * parent->farEnd5 +
+      (((index & (1 << 5)) >> 5) ^
+       (parent->farEnd5 < parent->middle5)) *
+          (parent->farEnd5 - parent->middle5);
+  child->farEnd5 =
+      child->middle5 + (parent->farEnd5 - parent->middle5) / 2;
+  
+}
+
 bool traverseOctree6(__global uint *octree,
                             float pos0, float dir0,
                            float invdir0,  float pos1, float dir1,
@@ -1502,7 +1410,7 @@ bool traverseOctree6(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
    float t00 = (origin0 - pos0) * invdir0;
   float t10 = (origin0 + sidelength - pos0) * invdir0;
@@ -1533,7 +1441,7 @@ bool traverseOctree6(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
    float currPos0 = pos0 + currDist * dir0;
    float currPos1 = pos1 + currDist * dir1;
    float currPos2 = pos2 + currDist * dir2;
@@ -1542,28 +1450,10 @@ bool traverseOctree6(__global uint *octree,
    float currPos5 = pos5 + currDist * dir5;
   
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-     float middle0;
-    float farEnd0;
-     float middle1;
-    float farEnd1;
-     float middle2;
-    float farEnd2;
-     float middle3;
-    float farEnd3;
-     float middle4;
-    float farEnd4;
-     float middle5;
-    float farEnd5;
-    
-  } stack[64];
+  StackEntry6 stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntry6 baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
    baseEntry.middle0 = origin0 + sidelength / 2;
   baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
@@ -1579,204 +1469,106 @@ bool traverseOctree6(__global uint *octree,
   baseEntry.farEnd5 = origin5 + (invdir5 > 0) * sidelength;
   
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info:  entry.middle0: %f, "
-             "entry.farEnd0: %f, currPos0: %f\n  entry.middle1: %f, "
-             "entry.farEnd1: %f, currPos1: %f\n  entry.middle2: %f, "
-             "entry.farEnd2: %f, currPos2: %f\n  entry.middle3: %f, "
-             "entry.farEnd3: %f, currPos3: %f\n  entry.middle4: %f, "
-             "entry.farEnd4: %f, currPos4: %f\n  entry.middle5: %f, "
-             "entry.farEnd5: %f, currPos5: %f\n ",
-              entry.middle0, entry.farEnd0, currPos0,
-              entry.middle1, entry.farEnd1, currPos1,
-              entry.middle2, entry.farEnd2, currPos2,
-              entry.middle3, entry.farEnd3, currPos3,
-              entry.middle4, entry.farEnd4, currPos4,
-              entry.middle5, entry.farEnd5, currPos5,
-             
-             0);
-    }
-    if (entry.processed) {
+    StackEntry6 entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
+      }
       float minStep = FLT_MAX;
-      float val1, val2;
-       val1 = (entry.middle0 - currPos0) * invdir0;
-      val2 = (entry.farEnd0 - currPos0) * invdir0;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle1 - currPos1) * invdir1;
-      val2 = (entry.farEnd1 - currPos1) * invdir1;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle2 - currPos2) * invdir2;
-      val2 = (entry.farEnd2 - currPos2) * invdir2;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle3 - currPos3) * invdir3;
-      val2 = (entry.farEnd3 - currPos3) * invdir3;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle4 - currPos4) * invdir4;
-      val2 = (entry.farEnd4 - currPos4) * invdir4;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle5 - currPos5) * invdir5;
-      val2 = (entry.farEnd5 - currPos5) * invdir5;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
+       minStep =
+          min(minStep, (entry.farEnd0 - currPos0) * invdir0);
+       minStep =
+          min(minStep, (entry.farEnd1 - currPos1) * invdir1);
+       minStep =
+          min(minStep, (entry.farEnd2 - currPos2) * invdir2);
+       minStep =
+          min(minStep, (entry.farEnd3 - currPos3) * invdir3);
+       minStep =
+          min(minStep, (entry.farEnd4 - currPos4) * invdir4);
+       minStep =
+          min(minStep, (entry.farEnd5 - currPos5) * invdir5);
       
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-       currPos0 = pos0 + currDist * dir0;
-      if (debug)
-        printf("currPos0: %f\n", currPos0);
-       currPos1 = pos1 + currDist * dir1;
-      if (debug)
-        printf("currPos1: %f\n", currPos1);
-       currPos2 = pos2 + currDist * dir2;
-      if (debug)
-        printf("currPos2: %f\n", currPos2);
-       currPos3 = pos3 + currDist * dir3;
-      if (debug)
-        printf("currPos3: %f\n", currPos3);
-       currPos4 = pos4 + currDist * dir4;
-      if (debug)
-        printf("currPos4: %f\n", currPos4);
-       currPos5 = pos5 + currDist * dir5;
-      if (debug)
-        printf("currPos5: %f\n", currPos5);
-      
-      if ((entry.farEnd0 - currPos0) * invdir0 < 0 ||
-              (entry.farEnd1 - currPos1) * invdir1 < 0 ||
-              (entry.farEnd2 - currPos2) * invdir2 < 0 ||
-              (entry.farEnd3 - currPos3) * invdir3 < 0 ||
-              (entry.farEnd4 - currPos4) * invdir4 < 0 ||
-              (entry.farEnd5 - currPos5) * invdir5 < 0 ||
-              
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+       currPos0 = pos0 + currDist * dir0;
+       currPos1 = pos1 + currDist * dir1;
+       currPos2 = pos2 + currDist * dir2;
+       currPos3 = pos3 + currDist * dir3;
+       currPos4 = pos4 + currDist * dir4;
+       currPos5 = pos5 + currDist * dir5;
+      
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | 
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (((entry.farEnd0 - currPos0) * invdir0 >
+                               0) &&
+                ((entry.farEnd1 - currPos1) * invdir1 >
+                               0) &&
+                ((entry.farEnd2 - currPos2) * invdir2 >
+                               0) &&
+                ((entry.farEnd3 - currPos3) * invdir3 >
+                               0) &&
+                ((entry.farEnd4 - currPos4) * invdir4 >
+                               0) &&
+                ((entry.farEnd5 - currPos5) * invdir5 >
+                               0) &&
+                
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | 
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-         child.middle0 =
-            1.5 * entry.middle0 - 0.5 * entry.farEnd0 +
-            (((entry.index & (1 << 0)) >> 0) ^ (invdir0 < 0)) *
-                (entry.farEnd0 - entry.middle0);
-        child.farEnd0 =
-            child.middle0 + (entry.farEnd0 - entry.middle0) / 2;
-         child.middle1 =
-            1.5 * entry.middle1 - 0.5 * entry.farEnd1 +
-            (((entry.index & (1 << 1)) >> 1) ^ (invdir1 < 0)) *
-                (entry.farEnd1 - entry.middle1);
-        child.farEnd1 =
-            child.middle1 + (entry.farEnd1 - entry.middle1) / 2;
-         child.middle2 =
-            1.5 * entry.middle2 - 0.5 * entry.farEnd2 +
-            (((entry.index & (1 << 2)) >> 2) ^ (invdir2 < 0)) *
-                (entry.farEnd2 - entry.middle2);
-        child.farEnd2 =
-            child.middle2 + (entry.farEnd2 - entry.middle2) / 2;
-         child.middle3 =
-            1.5 * entry.middle3 - 0.5 * entry.farEnd3 +
-            (((entry.index & (1 << 3)) >> 3) ^ (invdir3 < 0)) *
-                (entry.farEnd3 - entry.middle3);
-        child.farEnd3 =
-            child.middle3 + (entry.farEnd3 - entry.middle3) / 2;
-         child.middle4 =
-            1.5 * entry.middle4 - 0.5 * entry.farEnd4 +
-            (((entry.index & (1 << 4)) >> 4) ^ (invdir4 < 0)) *
-                (entry.farEnd4 - entry.middle4);
-        child.farEnd4 =
-            child.middle4 + (entry.farEnd4 - entry.middle4) / 2;
-         child.middle5 =
-            1.5 * entry.middle5 - 0.5 * entry.farEnd5 +
-            (((entry.index & (1 << 5)) >> 5) ^ (invdir5 < 0)) *
-                (entry.farEnd5 - entry.middle5);
-        child.farEnd5 =
-            child.middle5 + (entry.farEnd5 - entry.middle5) / 2;
+        StackEntry6 child;
+         if ((1 << 0) & diffIndex) {
+          makeChild6(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 0);
+        }
+         if ((1 << 1) & diffIndex) {
+          makeChild6(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 1);
+        }
+         if ((1 << 2) & diffIndex) {
+          makeChild6(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 2);
+        }
+         if ((1 << 3) & diffIndex) {
+          makeChild6(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 3);
+        }
+         if ((1 << 4) & diffIndex) {
+          makeChild6(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 4);
+        }
+         if ((1 << 5) & diffIndex) {
+          makeChild6(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 5);
+        }
         
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntry6 child;
+      makeChild6(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -1790,7 +1582,7 @@ bool rayBBox6( float pos0, float invdir0,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
    float t00 = (min0 - pos0) * invdir0;
@@ -1829,6 +1621,8 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
                         float dir4, float invdir4,  float pos5,
                         float dir5, float invdir5, 
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[6];
    invdirArr[0] = invdir0;
    invdirArr[1] = invdir1;
@@ -1838,22 +1632,10 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
    invdirArr[5] = invdir5;
   
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-     printf("invdir0: %f\n", invdir0);
-     printf("invdir1: %f\n", invdir1);
-     printf("invdir2: %f\n", invdir2);
-     printf("invdir3: %f\n", invdir3);
-     printf("invdir4: %f\n", invdir4);
-     printf("invdir5: %f\n", invdir5);
-    
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVH6: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
      float min0 = *floatBVH++;
@@ -1871,14 +1653,10 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
     
     if (!rayBBox6(
              pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctree6\n");
       if (traverseOctree6(currBvh + *currBvh,  pos0,
                                 dir0, invdir0,  pos1,
                                 dir1, invdir1,  pos2,
@@ -1906,8 +1684,6 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVH6\n\n\n\n\n");
   return false;
 }
 
@@ -1915,14 +1691,16 @@ __kernel void renderStd6(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
    float pos0 = pos[0];
   float dir0 = forward[0] + xoff * right[0] + yoff * up[0];
    float pos1 = pos[1];
@@ -1944,7 +1722,7 @@ __kernel void renderStd6(__global uint *bvh, __global float *pos,
    norm += dir4 * dir4;
    norm += dir5 * dir5;
   
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);
@@ -1978,7 +1756,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -1986,11 +1764,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -2049,6 +1822,84 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntry7 {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+   float middle0;
+  float farEnd0;
+   float middle1;
+  float farEnd1;
+   float middle2;
+  float farEnd2;
+   float middle3;
+  float farEnd3;
+   float middle4;
+  float farEnd4;
+   float middle5;
+  float farEnd5;
+   float middle6;
+  float farEnd6;
+  
+} StackEntry7;
+
+void makeChild7(const StackEntry7 *parent, size_t index,
+                      StackEntry7 *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+   child->middle0 =
+      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
+      (((index & (1 << 0)) >> 0) ^
+       (parent->farEnd0 < parent->middle0)) *
+          (parent->farEnd0 - parent->middle0);
+  child->farEnd0 =
+      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
+   child->middle1 =
+      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
+      (((index & (1 << 1)) >> 1) ^
+       (parent->farEnd1 < parent->middle1)) *
+          (parent->farEnd1 - parent->middle1);
+  child->farEnd1 =
+      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
+   child->middle2 =
+      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
+      (((index & (1 << 2)) >> 2) ^
+       (parent->farEnd2 < parent->middle2)) *
+          (parent->farEnd2 - parent->middle2);
+  child->farEnd2 =
+      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
+   child->middle3 =
+      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
+      (((index & (1 << 3)) >> 3) ^
+       (parent->farEnd3 < parent->middle3)) *
+          (parent->farEnd3 - parent->middle3);
+  child->farEnd3 =
+      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
+   child->middle4 =
+      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
+      (((index & (1 << 4)) >> 4) ^
+       (parent->farEnd4 < parent->middle4)) *
+          (parent->farEnd4 - parent->middle4);
+  child->farEnd4 =
+      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
+   child->middle5 =
+      1.5f * parent->middle5 - 0.5f * parent->farEnd5 +
+      (((index & (1 << 5)) >> 5) ^
+       (parent->farEnd5 < parent->middle5)) *
+          (parent->farEnd5 - parent->middle5);
+  child->farEnd5 =
+      child->middle5 + (parent->farEnd5 - parent->middle5) / 2;
+   child->middle6 =
+      1.5f * parent->middle6 - 0.5f * parent->farEnd6 +
+      (((index & (1 << 6)) >> 6) ^
+       (parent->farEnd6 < parent->middle6)) *
+          (parent->farEnd6 - parent->middle6);
+  child->farEnd6 =
+      child->middle6 + (parent->farEnd6 - parent->middle6) / 2;
+  
+}
+
 bool traverseOctree7(__global uint *octree,
                             float pos0, float dir0,
                            float invdir0,  float pos1, float dir1,
@@ -2071,7 +1922,7 @@ bool traverseOctree7(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
    float t00 = (origin0 - pos0) * invdir0;
   float t10 = (origin0 + sidelength - pos0) * invdir0;
@@ -2106,7 +1957,7 @@ bool traverseOctree7(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
    float currPos0 = pos0 + currDist * dir0;
    float currPos1 = pos1 + currDist * dir1;
    float currPos2 = pos2 + currDist * dir2;
@@ -2116,30 +1967,10 @@ bool traverseOctree7(__global uint *octree,
    float currPos6 = pos6 + currDist * dir6;
   
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-     float middle0;
-    float farEnd0;
-     float middle1;
-    float farEnd1;
-     float middle2;
-    float farEnd2;
-     float middle3;
-    float farEnd3;
-     float middle4;
-    float farEnd4;
-     float middle5;
-    float farEnd5;
-     float middle6;
-    float farEnd6;
-    
-  } stack[64];
+  StackEntry7 stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntry7 baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
    baseEntry.middle0 = origin0 + sidelength / 2;
   baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
@@ -2157,227 +1988,116 @@ bool traverseOctree7(__global uint *octree,
   baseEntry.farEnd6 = origin6 + (invdir6 > 0) * sidelength;
   
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info:  entry.middle0: %f, "
-             "entry.farEnd0: %f, currPos0: %f\n  entry.middle1: %f, "
-             "entry.farEnd1: %f, currPos1: %f\n  entry.middle2: %f, "
-             "entry.farEnd2: %f, currPos2: %f\n  entry.middle3: %f, "
-             "entry.farEnd3: %f, currPos3: %f\n  entry.middle4: %f, "
-             "entry.farEnd4: %f, currPos4: %f\n  entry.middle5: %f, "
-             "entry.farEnd5: %f, currPos5: %f\n  entry.middle6: %f, "
-             "entry.farEnd6: %f, currPos6: %f\n ",
-              entry.middle0, entry.farEnd0, currPos0,
-              entry.middle1, entry.farEnd1, currPos1,
-              entry.middle2, entry.farEnd2, currPos2,
-              entry.middle3, entry.farEnd3, currPos3,
-              entry.middle4, entry.farEnd4, currPos4,
-              entry.middle5, entry.farEnd5, currPos5,
-              entry.middle6, entry.farEnd6, currPos6,
-             
-             0);
-    }
-    if (entry.processed) {
+    StackEntry7 entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
+      }
       float minStep = FLT_MAX;
-      float val1, val2;
-       val1 = (entry.middle0 - currPos0) * invdir0;
-      val2 = (entry.farEnd0 - currPos0) * invdir0;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle1 - currPos1) * invdir1;
-      val2 = (entry.farEnd1 - currPos1) * invdir1;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle2 - currPos2) * invdir2;
-      val2 = (entry.farEnd2 - currPos2) * invdir2;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle3 - currPos3) * invdir3;
-      val2 = (entry.farEnd3 - currPos3) * invdir3;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle4 - currPos4) * invdir4;
-      val2 = (entry.farEnd4 - currPos4) * invdir4;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle5 - currPos5) * invdir5;
-      val2 = (entry.farEnd5 - currPos5) * invdir5;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle6 - currPos6) * invdir6;
-      val2 = (entry.farEnd6 - currPos6) * invdir6;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
+       minStep =
+          min(minStep, (entry.farEnd0 - currPos0) * invdir0);
+       minStep =
+          min(minStep, (entry.farEnd1 - currPos1) * invdir1);
+       minStep =
+          min(minStep, (entry.farEnd2 - currPos2) * invdir2);
+       minStep =
+          min(minStep, (entry.farEnd3 - currPos3) * invdir3);
+       minStep =
+          min(minStep, (entry.farEnd4 - currPos4) * invdir4);
+       minStep =
+          min(minStep, (entry.farEnd5 - currPos5) * invdir5);
+       minStep =
+          min(minStep, (entry.farEnd6 - currPos6) * invdir6);
       
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-       currPos0 = pos0 + currDist * dir0;
-      if (debug)
-        printf("currPos0: %f\n", currPos0);
-       currPos1 = pos1 + currDist * dir1;
-      if (debug)
-        printf("currPos1: %f\n", currPos1);
-       currPos2 = pos2 + currDist * dir2;
-      if (debug)
-        printf("currPos2: %f\n", currPos2);
-       currPos3 = pos3 + currDist * dir3;
-      if (debug)
-        printf("currPos3: %f\n", currPos3);
-       currPos4 = pos4 + currDist * dir4;
-      if (debug)
-        printf("currPos4: %f\n", currPos4);
-       currPos5 = pos5 + currDist * dir5;
-      if (debug)
-        printf("currPos5: %f\n", currPos5);
-       currPos6 = pos6 + currDist * dir6;
-      if (debug)
-        printf("currPos6: %f\n", currPos6);
-      
-      if ((entry.farEnd0 - currPos0) * invdir0 < 0 ||
-              (entry.farEnd1 - currPos1) * invdir1 < 0 ||
-              (entry.farEnd2 - currPos2) * invdir2 < 0 ||
-              (entry.farEnd3 - currPos3) * invdir3 < 0 ||
-              (entry.farEnd4 - currPos4) * invdir4 < 0 ||
-              (entry.farEnd5 - currPos5) * invdir5 < 0 ||
-              (entry.farEnd6 - currPos6) * invdir6 < 0 ||
-              
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+       currPos0 = pos0 + currDist * dir0;
+       currPos1 = pos1 + currDist * dir1;
+       currPos2 = pos2 + currDist * dir2;
+       currPos3 = pos3 + currDist * dir3;
+       currPos4 = pos4 + currDist * dir4;
+       currPos5 = pos5 + currDist * dir5;
+       currPos6 = pos6 + currDist * dir6;
+      
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | 
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (((entry.farEnd0 - currPos0) * invdir0 >
+                               0) &&
+                ((entry.farEnd1 - currPos1) * invdir1 >
+                               0) &&
+                ((entry.farEnd2 - currPos2) * invdir2 >
+                               0) &&
+                ((entry.farEnd3 - currPos3) * invdir3 >
+                               0) &&
+                ((entry.farEnd4 - currPos4) * invdir4 >
+                               0) &&
+                ((entry.farEnd5 - currPos5) * invdir5 >
+                               0) &&
+                ((entry.farEnd6 - currPos6) * invdir6 >
+                               0) &&
+                
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | 
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-         child.middle0 =
-            1.5 * entry.middle0 - 0.5 * entry.farEnd0 +
-            (((entry.index & (1 << 0)) >> 0) ^ (invdir0 < 0)) *
-                (entry.farEnd0 - entry.middle0);
-        child.farEnd0 =
-            child.middle0 + (entry.farEnd0 - entry.middle0) / 2;
-         child.middle1 =
-            1.5 * entry.middle1 - 0.5 * entry.farEnd1 +
-            (((entry.index & (1 << 1)) >> 1) ^ (invdir1 < 0)) *
-                (entry.farEnd1 - entry.middle1);
-        child.farEnd1 =
-            child.middle1 + (entry.farEnd1 - entry.middle1) / 2;
-         child.middle2 =
-            1.5 * entry.middle2 - 0.5 * entry.farEnd2 +
-            (((entry.index & (1 << 2)) >> 2) ^ (invdir2 < 0)) *
-                (entry.farEnd2 - entry.middle2);
-        child.farEnd2 =
-            child.middle2 + (entry.farEnd2 - entry.middle2) / 2;
-         child.middle3 =
-            1.5 * entry.middle3 - 0.5 * entry.farEnd3 +
-            (((entry.index & (1 << 3)) >> 3) ^ (invdir3 < 0)) *
-                (entry.farEnd3 - entry.middle3);
-        child.farEnd3 =
-            child.middle3 + (entry.farEnd3 - entry.middle3) / 2;
-         child.middle4 =
-            1.5 * entry.middle4 - 0.5 * entry.farEnd4 +
-            (((entry.index & (1 << 4)) >> 4) ^ (invdir4 < 0)) *
-                (entry.farEnd4 - entry.middle4);
-        child.farEnd4 =
-            child.middle4 + (entry.farEnd4 - entry.middle4) / 2;
-         child.middle5 =
-            1.5 * entry.middle5 - 0.5 * entry.farEnd5 +
-            (((entry.index & (1 << 5)) >> 5) ^ (invdir5 < 0)) *
-                (entry.farEnd5 - entry.middle5);
-        child.farEnd5 =
-            child.middle5 + (entry.farEnd5 - entry.middle5) / 2;
-         child.middle6 =
-            1.5 * entry.middle6 - 0.5 * entry.farEnd6 +
-            (((entry.index & (1 << 6)) >> 6) ^ (invdir6 < 0)) *
-                (entry.farEnd6 - entry.middle6);
-        child.farEnd6 =
-            child.middle6 + (entry.farEnd6 - entry.middle6) / 2;
+        StackEntry7 child;
+         if ((1 << 0) & diffIndex) {
+          makeChild7(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 0);
+        }
+         if ((1 << 1) & diffIndex) {
+          makeChild7(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 1);
+        }
+         if ((1 << 2) & diffIndex) {
+          makeChild7(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 2);
+        }
+         if ((1 << 3) & diffIndex) {
+          makeChild7(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 3);
+        }
+         if ((1 << 4) & diffIndex) {
+          makeChild7(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 4);
+        }
+         if ((1 << 5) & diffIndex) {
+          makeChild7(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 5);
+        }
+         if ((1 << 6) & diffIndex) {
+          makeChild7(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 6);
+        }
         
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntry7 child;
+      makeChild7(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -2392,7 +2112,7 @@ bool rayBBox7( float pos0, float invdir0,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
    float t00 = (min0 - pos0) * invdir0;
@@ -2436,6 +2156,8 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
                         float dir5, float invdir5,  float pos6,
                         float dir6, float invdir6, 
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[7];
    invdirArr[0] = invdir0;
    invdirArr[1] = invdir1;
@@ -2446,23 +2168,10 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
    invdirArr[6] = invdir6;
   
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-     printf("invdir0: %f\n", invdir0);
-     printf("invdir1: %f\n", invdir1);
-     printf("invdir2: %f\n", invdir2);
-     printf("invdir3: %f\n", invdir3);
-     printf("invdir4: %f\n", invdir4);
-     printf("invdir5: %f\n", invdir5);
-     printf("invdir6: %f\n", invdir6);
-    
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVH7: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
      float min0 = *floatBVH++;
@@ -2482,14 +2191,10 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
     
     if (!rayBBox7(
              pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  pos6, invdir6, min6, max6,  0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctree7\n");
       if (traverseOctree7(currBvh + *currBvh,  pos0,
                                 dir0, invdir0,  pos1,
                                 dir1, invdir1,  pos2,
@@ -2518,8 +2223,6 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVH7\n\n\n\n\n");
   return false;
 }
 
@@ -2527,14 +2230,16 @@ __kernel void renderStd7(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
    float pos0 = pos[0];
   float dir0 = forward[0] + xoff * right[0] + yoff * up[0];
    float pos1 = pos[1];
@@ -2559,7 +2264,7 @@ __kernel void renderStd7(__global uint *bvh, __global float *pos,
    norm += dir5 * dir5;
    norm += dir6 * dir6;
   
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);
@@ -2595,7 +2300,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -2603,11 +2308,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -2666,6 +2366,93 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntry8 {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+   float middle0;
+  float farEnd0;
+   float middle1;
+  float farEnd1;
+   float middle2;
+  float farEnd2;
+   float middle3;
+  float farEnd3;
+   float middle4;
+  float farEnd4;
+   float middle5;
+  float farEnd5;
+   float middle6;
+  float farEnd6;
+   float middle7;
+  float farEnd7;
+  
+} StackEntry8;
+
+void makeChild8(const StackEntry8 *parent, size_t index,
+                      StackEntry8 *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+   child->middle0 =
+      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
+      (((index & (1 << 0)) >> 0) ^
+       (parent->farEnd0 < parent->middle0)) *
+          (parent->farEnd0 - parent->middle0);
+  child->farEnd0 =
+      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
+   child->middle1 =
+      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
+      (((index & (1 << 1)) >> 1) ^
+       (parent->farEnd1 < parent->middle1)) *
+          (parent->farEnd1 - parent->middle1);
+  child->farEnd1 =
+      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
+   child->middle2 =
+      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
+      (((index & (1 << 2)) >> 2) ^
+       (parent->farEnd2 < parent->middle2)) *
+          (parent->farEnd2 - parent->middle2);
+  child->farEnd2 =
+      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
+   child->middle3 =
+      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
+      (((index & (1 << 3)) >> 3) ^
+       (parent->farEnd3 < parent->middle3)) *
+          (parent->farEnd3 - parent->middle3);
+  child->farEnd3 =
+      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
+   child->middle4 =
+      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
+      (((index & (1 << 4)) >> 4) ^
+       (parent->farEnd4 < parent->middle4)) *
+          (parent->farEnd4 - parent->middle4);
+  child->farEnd4 =
+      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
+   child->middle5 =
+      1.5f * parent->middle5 - 0.5f * parent->farEnd5 +
+      (((index & (1 << 5)) >> 5) ^
+       (parent->farEnd5 < parent->middle5)) *
+          (parent->farEnd5 - parent->middle5);
+  child->farEnd5 =
+      child->middle5 + (parent->farEnd5 - parent->middle5) / 2;
+   child->middle6 =
+      1.5f * parent->middle6 - 0.5f * parent->farEnd6 +
+      (((index & (1 << 6)) >> 6) ^
+       (parent->farEnd6 < parent->middle6)) *
+          (parent->farEnd6 - parent->middle6);
+  child->farEnd6 =
+      child->middle6 + (parent->farEnd6 - parent->middle6) / 2;
+   child->middle7 =
+      1.5f * parent->middle7 - 0.5f * parent->farEnd7 +
+      (((index & (1 << 7)) >> 7) ^
+       (parent->farEnd7 < parent->middle7)) *
+          (parent->farEnd7 - parent->middle7);
+  child->farEnd7 =
+      child->middle7 + (parent->farEnd7 - parent->middle7) / 2;
+  
+}
+
 bool traverseOctree8(__global uint *octree,
                             float pos0, float dir0,
                            float invdir0,  float pos1, float dir1,
@@ -2690,7 +2477,7 @@ bool traverseOctree8(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
    float t00 = (origin0 - pos0) * invdir0;
   float t10 = (origin0 + sidelength - pos0) * invdir0;
@@ -2729,7 +2516,7 @@ bool traverseOctree8(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
    float currPos0 = pos0 + currDist * dir0;
    float currPos1 = pos1 + currDist * dir1;
    float currPos2 = pos2 + currDist * dir2;
@@ -2740,32 +2527,10 @@ bool traverseOctree8(__global uint *octree,
    float currPos7 = pos7 + currDist * dir7;
   
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-     float middle0;
-    float farEnd0;
-     float middle1;
-    float farEnd1;
-     float middle2;
-    float farEnd2;
-     float middle3;
-    float farEnd3;
-     float middle4;
-    float farEnd4;
-     float middle5;
-    float farEnd5;
-     float middle6;
-    float farEnd6;
-     float middle7;
-    float farEnd7;
-    
-  } stack[64];
+  StackEntry8 stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntry8 baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
    baseEntry.middle0 = origin0 + sidelength / 2;
   baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
@@ -2785,250 +2550,126 @@ bool traverseOctree8(__global uint *octree,
   baseEntry.farEnd7 = origin7 + (invdir7 > 0) * sidelength;
   
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info:  entry.middle0: %f, "
-             "entry.farEnd0: %f, currPos0: %f\n  entry.middle1: %f, "
-             "entry.farEnd1: %f, currPos1: %f\n  entry.middle2: %f, "
-             "entry.farEnd2: %f, currPos2: %f\n  entry.middle3: %f, "
-             "entry.farEnd3: %f, currPos3: %f\n  entry.middle4: %f, "
-             "entry.farEnd4: %f, currPos4: %f\n  entry.middle5: %f, "
-             "entry.farEnd5: %f, currPos5: %f\n  entry.middle6: %f, "
-             "entry.farEnd6: %f, currPos6: %f\n  entry.middle7: %f, "
-             "entry.farEnd7: %f, currPos7: %f\n ",
-              entry.middle0, entry.farEnd0, currPos0,
-              entry.middle1, entry.farEnd1, currPos1,
-              entry.middle2, entry.farEnd2, currPos2,
-              entry.middle3, entry.farEnd3, currPos3,
-              entry.middle4, entry.farEnd4, currPos4,
-              entry.middle5, entry.farEnd5, currPos5,
-              entry.middle6, entry.farEnd6, currPos6,
-              entry.middle7, entry.farEnd7, currPos7,
-             
-             0);
-    }
-    if (entry.processed) {
+    StackEntry8 entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
+      }
       float minStep = FLT_MAX;
-      float val1, val2;
-       val1 = (entry.middle0 - currPos0) * invdir0;
-      val2 = (entry.farEnd0 - currPos0) * invdir0;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle1 - currPos1) * invdir1;
-      val2 = (entry.farEnd1 - currPos1) * invdir1;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle2 - currPos2) * invdir2;
-      val2 = (entry.farEnd2 - currPos2) * invdir2;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle3 - currPos3) * invdir3;
-      val2 = (entry.farEnd3 - currPos3) * invdir3;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle4 - currPos4) * invdir4;
-      val2 = (entry.farEnd4 - currPos4) * invdir4;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle5 - currPos5) * invdir5;
-      val2 = (entry.farEnd5 - currPos5) * invdir5;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle6 - currPos6) * invdir6;
-      val2 = (entry.farEnd6 - currPos6) * invdir6;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle7 - currPos7) * invdir7;
-      val2 = (entry.farEnd7 - currPos7) * invdir7;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
+       minStep =
+          min(minStep, (entry.farEnd0 - currPos0) * invdir0);
+       minStep =
+          min(minStep, (entry.farEnd1 - currPos1) * invdir1);
+       minStep =
+          min(minStep, (entry.farEnd2 - currPos2) * invdir2);
+       minStep =
+          min(minStep, (entry.farEnd3 - currPos3) * invdir3);
+       minStep =
+          min(minStep, (entry.farEnd4 - currPos4) * invdir4);
+       minStep =
+          min(minStep, (entry.farEnd5 - currPos5) * invdir5);
+       minStep =
+          min(minStep, (entry.farEnd6 - currPos6) * invdir6);
+       minStep =
+          min(minStep, (entry.farEnd7 - currPos7) * invdir7);
       
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-       currPos0 = pos0 + currDist * dir0;
-      if (debug)
-        printf("currPos0: %f\n", currPos0);
-       currPos1 = pos1 + currDist * dir1;
-      if (debug)
-        printf("currPos1: %f\n", currPos1);
-       currPos2 = pos2 + currDist * dir2;
-      if (debug)
-        printf("currPos2: %f\n", currPos2);
-       currPos3 = pos3 + currDist * dir3;
-      if (debug)
-        printf("currPos3: %f\n", currPos3);
-       currPos4 = pos4 + currDist * dir4;
-      if (debug)
-        printf("currPos4: %f\n", currPos4);
-       currPos5 = pos5 + currDist * dir5;
-      if (debug)
-        printf("currPos5: %f\n", currPos5);
-       currPos6 = pos6 + currDist * dir6;
-      if (debug)
-        printf("currPos6: %f\n", currPos6);
-       currPos7 = pos7 + currDist * dir7;
-      if (debug)
-        printf("currPos7: %f\n", currPos7);
-      
-      if ((entry.farEnd0 - currPos0) * invdir0 < 0 ||
-              (entry.farEnd1 - currPos1) * invdir1 < 0 ||
-              (entry.farEnd2 - currPos2) * invdir2 < 0 ||
-              (entry.farEnd3 - currPos3) * invdir3 < 0 ||
-              (entry.farEnd4 - currPos4) * invdir4 < 0 ||
-              (entry.farEnd5 - currPos5) * invdir5 < 0 ||
-              (entry.farEnd6 - currPos6) * invdir6 < 0 ||
-              (entry.farEnd7 - currPos7) * invdir7 < 0 ||
-              
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+       currPos0 = pos0 + currDist * dir0;
+       currPos1 = pos1 + currDist * dir1;
+       currPos2 = pos2 + currDist * dir2;
+       currPos3 = pos3 + currDist * dir3;
+       currPos4 = pos4 + currDist * dir4;
+       currPos5 = pos5 + currDist * dir5;
+       currPos6 = pos6 + currDist * dir6;
+       currPos7 = pos7 + currDist * dir7;
+      
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | ((currPos7 >= entry.middle7) << 7) | 
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (((entry.farEnd0 - currPos0) * invdir0 >
+                               0) &&
+                ((entry.farEnd1 - currPos1) * invdir1 >
+                               0) &&
+                ((entry.farEnd2 - currPos2) * invdir2 >
+                               0) &&
+                ((entry.farEnd3 - currPos3) * invdir3 >
+                               0) &&
+                ((entry.farEnd4 - currPos4) * invdir4 >
+                               0) &&
+                ((entry.farEnd5 - currPos5) * invdir5 >
+                               0) &&
+                ((entry.farEnd6 - currPos6) * invdir6 >
+                               0) &&
+                ((entry.farEnd7 - currPos7) * invdir7 >
+                               0) &&
+                
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | ((currPos7 >= entry.middle7) << 7) | 
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-         child.middle0 =
-            1.5 * entry.middle0 - 0.5 * entry.farEnd0 +
-            (((entry.index & (1 << 0)) >> 0) ^ (invdir0 < 0)) *
-                (entry.farEnd0 - entry.middle0);
-        child.farEnd0 =
-            child.middle0 + (entry.farEnd0 - entry.middle0) / 2;
-         child.middle1 =
-            1.5 * entry.middle1 - 0.5 * entry.farEnd1 +
-            (((entry.index & (1 << 1)) >> 1) ^ (invdir1 < 0)) *
-                (entry.farEnd1 - entry.middle1);
-        child.farEnd1 =
-            child.middle1 + (entry.farEnd1 - entry.middle1) / 2;
-         child.middle2 =
-            1.5 * entry.middle2 - 0.5 * entry.farEnd2 +
-            (((entry.index & (1 << 2)) >> 2) ^ (invdir2 < 0)) *
-                (entry.farEnd2 - entry.middle2);
-        child.farEnd2 =
-            child.middle2 + (entry.farEnd2 - entry.middle2) / 2;
-         child.middle3 =
-            1.5 * entry.middle3 - 0.5 * entry.farEnd3 +
-            (((entry.index & (1 << 3)) >> 3) ^ (invdir3 < 0)) *
-                (entry.farEnd3 - entry.middle3);
-        child.farEnd3 =
-            child.middle3 + (entry.farEnd3 - entry.middle3) / 2;
-         child.middle4 =
-            1.5 * entry.middle4 - 0.5 * entry.farEnd4 +
-            (((entry.index & (1 << 4)) >> 4) ^ (invdir4 < 0)) *
-                (entry.farEnd4 - entry.middle4);
-        child.farEnd4 =
-            child.middle4 + (entry.farEnd4 - entry.middle4) / 2;
-         child.middle5 =
-            1.5 * entry.middle5 - 0.5 * entry.farEnd5 +
-            (((entry.index & (1 << 5)) >> 5) ^ (invdir5 < 0)) *
-                (entry.farEnd5 - entry.middle5);
-        child.farEnd5 =
-            child.middle5 + (entry.farEnd5 - entry.middle5) / 2;
-         child.middle6 =
-            1.5 * entry.middle6 - 0.5 * entry.farEnd6 +
-            (((entry.index & (1 << 6)) >> 6) ^ (invdir6 < 0)) *
-                (entry.farEnd6 - entry.middle6);
-        child.farEnd6 =
-            child.middle6 + (entry.farEnd6 - entry.middle6) / 2;
-         child.middle7 =
-            1.5 * entry.middle7 - 0.5 * entry.farEnd7 +
-            (((entry.index & (1 << 7)) >> 7) ^ (invdir7 < 0)) *
-                (entry.farEnd7 - entry.middle7);
-        child.farEnd7 =
-            child.middle7 + (entry.farEnd7 - entry.middle7) / 2;
+        StackEntry8 child;
+         if ((1 << 0) & diffIndex) {
+          makeChild8(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 0);
+        }
+         if ((1 << 1) & diffIndex) {
+          makeChild8(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 1);
+        }
+         if ((1 << 2) & diffIndex) {
+          makeChild8(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 2);
+        }
+         if ((1 << 3) & diffIndex) {
+          makeChild8(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 3);
+        }
+         if ((1 << 4) & diffIndex) {
+          makeChild8(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 4);
+        }
+         if ((1 << 5) & diffIndex) {
+          makeChild8(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 5);
+        }
+         if ((1 << 6) & diffIndex) {
+          makeChild8(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 6);
+        }
+         if ((1 << 7) & diffIndex) {
+          makeChild8(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 7);
+        }
         
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntry8 child;
+      makeChild8(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -3044,7 +2685,7 @@ bool rayBBox8( float pos0, float invdir0,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
    float t00 = (min0 - pos0) * invdir0;
@@ -3093,6 +2734,8 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
                         float dir6, float invdir6,  float pos7,
                         float dir7, float invdir7, 
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[8];
    invdirArr[0] = invdir0;
    invdirArr[1] = invdir1;
@@ -3104,24 +2747,10 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
    invdirArr[7] = invdir7;
   
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-     printf("invdir0: %f\n", invdir0);
-     printf("invdir1: %f\n", invdir1);
-     printf("invdir2: %f\n", invdir2);
-     printf("invdir3: %f\n", invdir3);
-     printf("invdir4: %f\n", invdir4);
-     printf("invdir5: %f\n", invdir5);
-     printf("invdir6: %f\n", invdir6);
-     printf("invdir7: %f\n", invdir7);
-    
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVH8: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
      float min0 = *floatBVH++;
@@ -3143,14 +2772,10 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
     
     if (!rayBBox8(
              pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  pos6, invdir6, min6, max6,  pos7, invdir7, min7, max7,  0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctree8\n");
       if (traverseOctree8(currBvh + *currBvh,  pos0,
                                 dir0, invdir0,  pos1,
                                 dir1, invdir1,  pos2,
@@ -3180,8 +2805,6 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVH8\n\n\n\n\n");
   return false;
 }
 
@@ -3189,14 +2812,16 @@ __kernel void renderStd8(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
    float pos0 = pos[0];
   float dir0 = forward[0] + xoff * right[0] + yoff * up[0];
    float pos1 = pos[1];
@@ -3224,7 +2849,7 @@ __kernel void renderStd8(__global uint *bvh, __global float *pos,
    norm += dir6 * dir6;
    norm += dir7 * dir7;
   
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);
@@ -3262,7 +2887,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -3270,11 +2895,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -3333,6 +2953,102 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntry9 {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+   float middle0;
+  float farEnd0;
+   float middle1;
+  float farEnd1;
+   float middle2;
+  float farEnd2;
+   float middle3;
+  float farEnd3;
+   float middle4;
+  float farEnd4;
+   float middle5;
+  float farEnd5;
+   float middle6;
+  float farEnd6;
+   float middle7;
+  float farEnd7;
+   float middle8;
+  float farEnd8;
+  
+} StackEntry9;
+
+void makeChild9(const StackEntry9 *parent, size_t index,
+                      StackEntry9 *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+   child->middle0 =
+      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
+      (((index & (1 << 0)) >> 0) ^
+       (parent->farEnd0 < parent->middle0)) *
+          (parent->farEnd0 - parent->middle0);
+  child->farEnd0 =
+      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
+   child->middle1 =
+      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
+      (((index & (1 << 1)) >> 1) ^
+       (parent->farEnd1 < parent->middle1)) *
+          (parent->farEnd1 - parent->middle1);
+  child->farEnd1 =
+      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
+   child->middle2 =
+      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
+      (((index & (1 << 2)) >> 2) ^
+       (parent->farEnd2 < parent->middle2)) *
+          (parent->farEnd2 - parent->middle2);
+  child->farEnd2 =
+      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
+   child->middle3 =
+      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
+      (((index & (1 << 3)) >> 3) ^
+       (parent->farEnd3 < parent->middle3)) *
+          (parent->farEnd3 - parent->middle3);
+  child->farEnd3 =
+      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
+   child->middle4 =
+      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
+      (((index & (1 << 4)) >> 4) ^
+       (parent->farEnd4 < parent->middle4)) *
+          (parent->farEnd4 - parent->middle4);
+  child->farEnd4 =
+      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
+   child->middle5 =
+      1.5f * parent->middle5 - 0.5f * parent->farEnd5 +
+      (((index & (1 << 5)) >> 5) ^
+       (parent->farEnd5 < parent->middle5)) *
+          (parent->farEnd5 - parent->middle5);
+  child->farEnd5 =
+      child->middle5 + (parent->farEnd5 - parent->middle5) / 2;
+   child->middle6 =
+      1.5f * parent->middle6 - 0.5f * parent->farEnd6 +
+      (((index & (1 << 6)) >> 6) ^
+       (parent->farEnd6 < parent->middle6)) *
+          (parent->farEnd6 - parent->middle6);
+  child->farEnd6 =
+      child->middle6 + (parent->farEnd6 - parent->middle6) / 2;
+   child->middle7 =
+      1.5f * parent->middle7 - 0.5f * parent->farEnd7 +
+      (((index & (1 << 7)) >> 7) ^
+       (parent->farEnd7 < parent->middle7)) *
+          (parent->farEnd7 - parent->middle7);
+  child->farEnd7 =
+      child->middle7 + (parent->farEnd7 - parent->middle7) / 2;
+   child->middle8 =
+      1.5f * parent->middle8 - 0.5f * parent->farEnd8 +
+      (((index & (1 << 8)) >> 8) ^
+       (parent->farEnd8 < parent->middle8)) *
+          (parent->farEnd8 - parent->middle8);
+  child->farEnd8 =
+      child->middle8 + (parent->farEnd8 - parent->middle8) / 2;
+  
+}
+
 bool traverseOctree9(__global uint *octree,
                             float pos0, float dir0,
                            float invdir0,  float pos1, float dir1,
@@ -3359,7 +3075,7 @@ bool traverseOctree9(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
    float t00 = (origin0 - pos0) * invdir0;
   float t10 = (origin0 + sidelength - pos0) * invdir0;
@@ -3402,7 +3118,7 @@ bool traverseOctree9(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
    float currPos0 = pos0 + currDist * dir0;
    float currPos1 = pos1 + currDist * dir1;
    float currPos2 = pos2 + currDist * dir2;
@@ -3414,34 +3130,10 @@ bool traverseOctree9(__global uint *octree,
    float currPos8 = pos8 + currDist * dir8;
   
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-     float middle0;
-    float farEnd0;
-     float middle1;
-    float farEnd1;
-     float middle2;
-    float farEnd2;
-     float middle3;
-    float farEnd3;
-     float middle4;
-    float farEnd4;
-     float middle5;
-    float farEnd5;
-     float middle6;
-    float farEnd6;
-     float middle7;
-    float farEnd7;
-     float middle8;
-    float farEnd8;
-    
-  } stack[64];
+  StackEntry9 stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntry9 baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
    baseEntry.middle0 = origin0 + sidelength / 2;
   baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
@@ -3463,273 +3155,136 @@ bool traverseOctree9(__global uint *octree,
   baseEntry.farEnd8 = origin8 + (invdir8 > 0) * sidelength;
   
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info:  entry.middle0: %f, "
-             "entry.farEnd0: %f, currPos0: %f\n  entry.middle1: %f, "
-             "entry.farEnd1: %f, currPos1: %f\n  entry.middle2: %f, "
-             "entry.farEnd2: %f, currPos2: %f\n  entry.middle3: %f, "
-             "entry.farEnd3: %f, currPos3: %f\n  entry.middle4: %f, "
-             "entry.farEnd4: %f, currPos4: %f\n  entry.middle5: %f, "
-             "entry.farEnd5: %f, currPos5: %f\n  entry.middle6: %f, "
-             "entry.farEnd6: %f, currPos6: %f\n  entry.middle7: %f, "
-             "entry.farEnd7: %f, currPos7: %f\n  entry.middle8: %f, "
-             "entry.farEnd8: %f, currPos8: %f\n ",
-              entry.middle0, entry.farEnd0, currPos0,
-              entry.middle1, entry.farEnd1, currPos1,
-              entry.middle2, entry.farEnd2, currPos2,
-              entry.middle3, entry.farEnd3, currPos3,
-              entry.middle4, entry.farEnd4, currPos4,
-              entry.middle5, entry.farEnd5, currPos5,
-              entry.middle6, entry.farEnd6, currPos6,
-              entry.middle7, entry.farEnd7, currPos7,
-              entry.middle8, entry.farEnd8, currPos8,
-             
-             0);
-    }
-    if (entry.processed) {
+    StackEntry9 entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
+      }
       float minStep = FLT_MAX;
-      float val1, val2;
-       val1 = (entry.middle0 - currPos0) * invdir0;
-      val2 = (entry.farEnd0 - currPos0) * invdir0;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle1 - currPos1) * invdir1;
-      val2 = (entry.farEnd1 - currPos1) * invdir1;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle2 - currPos2) * invdir2;
-      val2 = (entry.farEnd2 - currPos2) * invdir2;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle3 - currPos3) * invdir3;
-      val2 = (entry.farEnd3 - currPos3) * invdir3;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle4 - currPos4) * invdir4;
-      val2 = (entry.farEnd4 - currPos4) * invdir4;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle5 - currPos5) * invdir5;
-      val2 = (entry.farEnd5 - currPos5) * invdir5;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle6 - currPos6) * invdir6;
-      val2 = (entry.farEnd6 - currPos6) * invdir6;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle7 - currPos7) * invdir7;
-      val2 = (entry.farEnd7 - currPos7) * invdir7;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle8 - currPos8) * invdir8;
-      val2 = (entry.farEnd8 - currPos8) * invdir8;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
+       minStep =
+          min(minStep, (entry.farEnd0 - currPos0) * invdir0);
+       minStep =
+          min(minStep, (entry.farEnd1 - currPos1) * invdir1);
+       minStep =
+          min(minStep, (entry.farEnd2 - currPos2) * invdir2);
+       minStep =
+          min(minStep, (entry.farEnd3 - currPos3) * invdir3);
+       minStep =
+          min(minStep, (entry.farEnd4 - currPos4) * invdir4);
+       minStep =
+          min(minStep, (entry.farEnd5 - currPos5) * invdir5);
+       minStep =
+          min(minStep, (entry.farEnd6 - currPos6) * invdir6);
+       minStep =
+          min(minStep, (entry.farEnd7 - currPos7) * invdir7);
+       minStep =
+          min(minStep, (entry.farEnd8 - currPos8) * invdir8);
       
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-       currPos0 = pos0 + currDist * dir0;
-      if (debug)
-        printf("currPos0: %f\n", currPos0);
-       currPos1 = pos1 + currDist * dir1;
-      if (debug)
-        printf("currPos1: %f\n", currPos1);
-       currPos2 = pos2 + currDist * dir2;
-      if (debug)
-        printf("currPos2: %f\n", currPos2);
-       currPos3 = pos3 + currDist * dir3;
-      if (debug)
-        printf("currPos3: %f\n", currPos3);
-       currPos4 = pos4 + currDist * dir4;
-      if (debug)
-        printf("currPos4: %f\n", currPos4);
-       currPos5 = pos5 + currDist * dir5;
-      if (debug)
-        printf("currPos5: %f\n", currPos5);
-       currPos6 = pos6 + currDist * dir6;
-      if (debug)
-        printf("currPos6: %f\n", currPos6);
-       currPos7 = pos7 + currDist * dir7;
-      if (debug)
-        printf("currPos7: %f\n", currPos7);
-       currPos8 = pos8 + currDist * dir8;
-      if (debug)
-        printf("currPos8: %f\n", currPos8);
-      
-      if ((entry.farEnd0 - currPos0) * invdir0 < 0 ||
-              (entry.farEnd1 - currPos1) * invdir1 < 0 ||
-              (entry.farEnd2 - currPos2) * invdir2 < 0 ||
-              (entry.farEnd3 - currPos3) * invdir3 < 0 ||
-              (entry.farEnd4 - currPos4) * invdir4 < 0 ||
-              (entry.farEnd5 - currPos5) * invdir5 < 0 ||
-              (entry.farEnd6 - currPos6) * invdir6 < 0 ||
-              (entry.farEnd7 - currPos7) * invdir7 < 0 ||
-              (entry.farEnd8 - currPos8) * invdir8 < 0 ||
-              
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+       currPos0 = pos0 + currDist * dir0;
+       currPos1 = pos1 + currDist * dir1;
+       currPos2 = pos2 + currDist * dir2;
+       currPos3 = pos3 + currDist * dir3;
+       currPos4 = pos4 + currDist * dir4;
+       currPos5 = pos5 + currDist * dir5;
+       currPos6 = pos6 + currDist * dir6;
+       currPos7 = pos7 + currDist * dir7;
+       currPos8 = pos8 + currDist * dir8;
+      
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | ((currPos7 >= entry.middle7) << 7) | ((currPos8 >= entry.middle8) << 8) | 
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (((entry.farEnd0 - currPos0) * invdir0 >
+                               0) &&
+                ((entry.farEnd1 - currPos1) * invdir1 >
+                               0) &&
+                ((entry.farEnd2 - currPos2) * invdir2 >
+                               0) &&
+                ((entry.farEnd3 - currPos3) * invdir3 >
+                               0) &&
+                ((entry.farEnd4 - currPos4) * invdir4 >
+                               0) &&
+                ((entry.farEnd5 - currPos5) * invdir5 >
+                               0) &&
+                ((entry.farEnd6 - currPos6) * invdir6 >
+                               0) &&
+                ((entry.farEnd7 - currPos7) * invdir7 >
+                               0) &&
+                ((entry.farEnd8 - currPos8) * invdir8 >
+                               0) &&
+                
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | ((currPos7 >= entry.middle7) << 7) | ((currPos8 >= entry.middle8) << 8) | 
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-         child.middle0 =
-            1.5 * entry.middle0 - 0.5 * entry.farEnd0 +
-            (((entry.index & (1 << 0)) >> 0) ^ (invdir0 < 0)) *
-                (entry.farEnd0 - entry.middle0);
-        child.farEnd0 =
-            child.middle0 + (entry.farEnd0 - entry.middle0) / 2;
-         child.middle1 =
-            1.5 * entry.middle1 - 0.5 * entry.farEnd1 +
-            (((entry.index & (1 << 1)) >> 1) ^ (invdir1 < 0)) *
-                (entry.farEnd1 - entry.middle1);
-        child.farEnd1 =
-            child.middle1 + (entry.farEnd1 - entry.middle1) / 2;
-         child.middle2 =
-            1.5 * entry.middle2 - 0.5 * entry.farEnd2 +
-            (((entry.index & (1 << 2)) >> 2) ^ (invdir2 < 0)) *
-                (entry.farEnd2 - entry.middle2);
-        child.farEnd2 =
-            child.middle2 + (entry.farEnd2 - entry.middle2) / 2;
-         child.middle3 =
-            1.5 * entry.middle3 - 0.5 * entry.farEnd3 +
-            (((entry.index & (1 << 3)) >> 3) ^ (invdir3 < 0)) *
-                (entry.farEnd3 - entry.middle3);
-        child.farEnd3 =
-            child.middle3 + (entry.farEnd3 - entry.middle3) / 2;
-         child.middle4 =
-            1.5 * entry.middle4 - 0.5 * entry.farEnd4 +
-            (((entry.index & (1 << 4)) >> 4) ^ (invdir4 < 0)) *
-                (entry.farEnd4 - entry.middle4);
-        child.farEnd4 =
-            child.middle4 + (entry.farEnd4 - entry.middle4) / 2;
-         child.middle5 =
-            1.5 * entry.middle5 - 0.5 * entry.farEnd5 +
-            (((entry.index & (1 << 5)) >> 5) ^ (invdir5 < 0)) *
-                (entry.farEnd5 - entry.middle5);
-        child.farEnd5 =
-            child.middle5 + (entry.farEnd5 - entry.middle5) / 2;
-         child.middle6 =
-            1.5 * entry.middle6 - 0.5 * entry.farEnd6 +
-            (((entry.index & (1 << 6)) >> 6) ^ (invdir6 < 0)) *
-                (entry.farEnd6 - entry.middle6);
-        child.farEnd6 =
-            child.middle6 + (entry.farEnd6 - entry.middle6) / 2;
-         child.middle7 =
-            1.5 * entry.middle7 - 0.5 * entry.farEnd7 +
-            (((entry.index & (1 << 7)) >> 7) ^ (invdir7 < 0)) *
-                (entry.farEnd7 - entry.middle7);
-        child.farEnd7 =
-            child.middle7 + (entry.farEnd7 - entry.middle7) / 2;
-         child.middle8 =
-            1.5 * entry.middle8 - 0.5 * entry.farEnd8 +
-            (((entry.index & (1 << 8)) >> 8) ^ (invdir8 < 0)) *
-                (entry.farEnd8 - entry.middle8);
-        child.farEnd8 =
-            child.middle8 + (entry.farEnd8 - entry.middle8) / 2;
+        StackEntry9 child;
+         if ((1 << 0) & diffIndex) {
+          makeChild9(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 0);
+        }
+         if ((1 << 1) & diffIndex) {
+          makeChild9(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 1);
+        }
+         if ((1 << 2) & diffIndex) {
+          makeChild9(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 2);
+        }
+         if ((1 << 3) & diffIndex) {
+          makeChild9(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 3);
+        }
+         if ((1 << 4) & diffIndex) {
+          makeChild9(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 4);
+        }
+         if ((1 << 5) & diffIndex) {
+          makeChild9(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 5);
+        }
+         if ((1 << 6) & diffIndex) {
+          makeChild9(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 6);
+        }
+         if ((1 << 7) & diffIndex) {
+          makeChild9(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 7);
+        }
+         if ((1 << 8) & diffIndex) {
+          makeChild9(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 8);
+        }
         
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntry9 child;
+      makeChild9(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -3746,7 +3301,7 @@ bool rayBBox9( float pos0, float invdir0,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
    float t00 = (min0 - pos0) * invdir0;
@@ -3800,6 +3355,8 @@ bool traverseBVH9(__global uint *bvh,  float pos0,
                         float dir7, float invdir7,  float pos8,
                         float dir8, float invdir8, 
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[9];
    invdirArr[0] = invdir0;
    invdirArr[1] = invdir1;
@@ -3812,25 +3369,10 @@ bool traverseBVH9(__global uint *bvh,  float pos0,
    invdirArr[8] = invdir8;
   
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-     printf("invdir0: %f\n", invdir0);
-     printf("invdir1: %f\n", invdir1);
-     printf("invdir2: %f\n", invdir2);
-     printf("invdir3: %f\n", invdir3);
-     printf("invdir4: %f\n", invdir4);
-     printf("invdir5: %f\n", invdir5);
-     printf("invdir6: %f\n", invdir6);
-     printf("invdir7: %f\n", invdir7);
-     printf("invdir8: %f\n", invdir8);
-    
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVH9: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
      float min0 = *floatBVH++;
@@ -3854,14 +3396,10 @@ bool traverseBVH9(__global uint *bvh,  float pos0,
     
     if (!rayBBox9(
              pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  pos6, invdir6, min6, max6,  pos7, invdir7, min7, max7,  pos8, invdir8, min8, max8,  0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctree9\n");
       if (traverseOctree9(currBvh + *currBvh,  pos0,
                                 dir0, invdir0,  pos1,
                                 dir1, invdir1,  pos2,
@@ -3892,8 +3430,6 @@ bool traverseBVH9(__global uint *bvh,  float pos0,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVH9\n\n\n\n\n");
   return false;
 }
 
@@ -3901,14 +3437,16 @@ __kernel void renderStd9(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
    float pos0 = pos[0];
   float dir0 = forward[0] + xoff * right[0] + yoff * up[0];
    float pos1 = pos[1];
@@ -3939,7 +3477,7 @@ __kernel void renderStd9(__global uint *bvh, __global float *pos,
    norm += dir7 * dir7;
    norm += dir8 * dir8;
   
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);
@@ -3979,7 +3517,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -3987,11 +3525,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -4050,6 +3583,111 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntry10 {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+   float middle0;
+  float farEnd0;
+   float middle1;
+  float farEnd1;
+   float middle2;
+  float farEnd2;
+   float middle3;
+  float farEnd3;
+   float middle4;
+  float farEnd4;
+   float middle5;
+  float farEnd5;
+   float middle6;
+  float farEnd6;
+   float middle7;
+  float farEnd7;
+   float middle8;
+  float farEnd8;
+   float middle9;
+  float farEnd9;
+  
+} StackEntry10;
+
+void makeChild10(const StackEntry10 *parent, size_t index,
+                      StackEntry10 *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+   child->middle0 =
+      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
+      (((index & (1 << 0)) >> 0) ^
+       (parent->farEnd0 < parent->middle0)) *
+          (parent->farEnd0 - parent->middle0);
+  child->farEnd0 =
+      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
+   child->middle1 =
+      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
+      (((index & (1 << 1)) >> 1) ^
+       (parent->farEnd1 < parent->middle1)) *
+          (parent->farEnd1 - parent->middle1);
+  child->farEnd1 =
+      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
+   child->middle2 =
+      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
+      (((index & (1 << 2)) >> 2) ^
+       (parent->farEnd2 < parent->middle2)) *
+          (parent->farEnd2 - parent->middle2);
+  child->farEnd2 =
+      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
+   child->middle3 =
+      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
+      (((index & (1 << 3)) >> 3) ^
+       (parent->farEnd3 < parent->middle3)) *
+          (parent->farEnd3 - parent->middle3);
+  child->farEnd3 =
+      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
+   child->middle4 =
+      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
+      (((index & (1 << 4)) >> 4) ^
+       (parent->farEnd4 < parent->middle4)) *
+          (parent->farEnd4 - parent->middle4);
+  child->farEnd4 =
+      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
+   child->middle5 =
+      1.5f * parent->middle5 - 0.5f * parent->farEnd5 +
+      (((index & (1 << 5)) >> 5) ^
+       (parent->farEnd5 < parent->middle5)) *
+          (parent->farEnd5 - parent->middle5);
+  child->farEnd5 =
+      child->middle5 + (parent->farEnd5 - parent->middle5) / 2;
+   child->middle6 =
+      1.5f * parent->middle6 - 0.5f * parent->farEnd6 +
+      (((index & (1 << 6)) >> 6) ^
+       (parent->farEnd6 < parent->middle6)) *
+          (parent->farEnd6 - parent->middle6);
+  child->farEnd6 =
+      child->middle6 + (parent->farEnd6 - parent->middle6) / 2;
+   child->middle7 =
+      1.5f * parent->middle7 - 0.5f * parent->farEnd7 +
+      (((index & (1 << 7)) >> 7) ^
+       (parent->farEnd7 < parent->middle7)) *
+          (parent->farEnd7 - parent->middle7);
+  child->farEnd7 =
+      child->middle7 + (parent->farEnd7 - parent->middle7) / 2;
+   child->middle8 =
+      1.5f * parent->middle8 - 0.5f * parent->farEnd8 +
+      (((index & (1 << 8)) >> 8) ^
+       (parent->farEnd8 < parent->middle8)) *
+          (parent->farEnd8 - parent->middle8);
+  child->farEnd8 =
+      child->middle8 + (parent->farEnd8 - parent->middle8) / 2;
+   child->middle9 =
+      1.5f * parent->middle9 - 0.5f * parent->farEnd9 +
+      (((index & (1 << 9)) >> 9) ^
+       (parent->farEnd9 < parent->middle9)) *
+          (parent->farEnd9 - parent->middle9);
+  child->farEnd9 =
+      child->middle9 + (parent->farEnd9 - parent->middle9) / 2;
+  
+}
+
 bool traverseOctree10(__global uint *octree,
                             float pos0, float dir0,
                            float invdir0,  float pos1, float dir1,
@@ -4078,7 +3716,7 @@ bool traverseOctree10(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
    float t00 = (origin0 - pos0) * invdir0;
   float t10 = (origin0 + sidelength - pos0) * invdir0;
@@ -4125,7 +3763,7 @@ bool traverseOctree10(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
    float currPos0 = pos0 + currDist * dir0;
    float currPos1 = pos1 + currDist * dir1;
    float currPos2 = pos2 + currDist * dir2;
@@ -4138,36 +3776,10 @@ bool traverseOctree10(__global uint *octree,
    float currPos9 = pos9 + currDist * dir9;
   
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-     float middle0;
-    float farEnd0;
-     float middle1;
-    float farEnd1;
-     float middle2;
-    float farEnd2;
-     float middle3;
-    float farEnd3;
-     float middle4;
-    float farEnd4;
-     float middle5;
-    float farEnd5;
-     float middle6;
-    float farEnd6;
-     float middle7;
-    float farEnd7;
-     float middle8;
-    float farEnd8;
-     float middle9;
-    float farEnd9;
-    
-  } stack[64];
+  StackEntry10 stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntry10 baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
    baseEntry.middle0 = origin0 + sidelength / 2;
   baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
@@ -4191,296 +3803,146 @@ bool traverseOctree10(__global uint *octree,
   baseEntry.farEnd9 = origin9 + (invdir9 > 0) * sidelength;
   
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info:  entry.middle0: %f, "
-             "entry.farEnd0: %f, currPos0: %f\n  entry.middle1: %f, "
-             "entry.farEnd1: %f, currPos1: %f\n  entry.middle2: %f, "
-             "entry.farEnd2: %f, currPos2: %f\n  entry.middle3: %f, "
-             "entry.farEnd3: %f, currPos3: %f\n  entry.middle4: %f, "
-             "entry.farEnd4: %f, currPos4: %f\n  entry.middle5: %f, "
-             "entry.farEnd5: %f, currPos5: %f\n  entry.middle6: %f, "
-             "entry.farEnd6: %f, currPos6: %f\n  entry.middle7: %f, "
-             "entry.farEnd7: %f, currPos7: %f\n  entry.middle8: %f, "
-             "entry.farEnd8: %f, currPos8: %f\n  entry.middle9: %f, "
-             "entry.farEnd9: %f, currPos9: %f\n ",
-              entry.middle0, entry.farEnd0, currPos0,
-              entry.middle1, entry.farEnd1, currPos1,
-              entry.middle2, entry.farEnd2, currPos2,
-              entry.middle3, entry.farEnd3, currPos3,
-              entry.middle4, entry.farEnd4, currPos4,
-              entry.middle5, entry.farEnd5, currPos5,
-              entry.middle6, entry.farEnd6, currPos6,
-              entry.middle7, entry.farEnd7, currPos7,
-              entry.middle8, entry.farEnd8, currPos8,
-              entry.middle9, entry.farEnd9, currPos9,
-             
-             0);
-    }
-    if (entry.processed) {
+    StackEntry10 entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
+      }
       float minStep = FLT_MAX;
-      float val1, val2;
-       val1 = (entry.middle0 - currPos0) * invdir0;
-      val2 = (entry.farEnd0 - currPos0) * invdir0;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle1 - currPos1) * invdir1;
-      val2 = (entry.farEnd1 - currPos1) * invdir1;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle2 - currPos2) * invdir2;
-      val2 = (entry.farEnd2 - currPos2) * invdir2;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle3 - currPos3) * invdir3;
-      val2 = (entry.farEnd3 - currPos3) * invdir3;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle4 - currPos4) * invdir4;
-      val2 = (entry.farEnd4 - currPos4) * invdir4;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle5 - currPos5) * invdir5;
-      val2 = (entry.farEnd5 - currPos5) * invdir5;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle6 - currPos6) * invdir6;
-      val2 = (entry.farEnd6 - currPos6) * invdir6;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle7 - currPos7) * invdir7;
-      val2 = (entry.farEnd7 - currPos7) * invdir7;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle8 - currPos8) * invdir8;
-      val2 = (entry.farEnd8 - currPos8) * invdir8;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle9 - currPos9) * invdir9;
-      val2 = (entry.farEnd9 - currPos9) * invdir9;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
+       minStep =
+          min(minStep, (entry.farEnd0 - currPos0) * invdir0);
+       minStep =
+          min(minStep, (entry.farEnd1 - currPos1) * invdir1);
+       minStep =
+          min(minStep, (entry.farEnd2 - currPos2) * invdir2);
+       minStep =
+          min(minStep, (entry.farEnd3 - currPos3) * invdir3);
+       minStep =
+          min(minStep, (entry.farEnd4 - currPos4) * invdir4);
+       minStep =
+          min(minStep, (entry.farEnd5 - currPos5) * invdir5);
+       minStep =
+          min(minStep, (entry.farEnd6 - currPos6) * invdir6);
+       minStep =
+          min(minStep, (entry.farEnd7 - currPos7) * invdir7);
+       minStep =
+          min(minStep, (entry.farEnd8 - currPos8) * invdir8);
+       minStep =
+          min(minStep, (entry.farEnd9 - currPos9) * invdir9);
       
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-       currPos0 = pos0 + currDist * dir0;
-      if (debug)
-        printf("currPos0: %f\n", currPos0);
-       currPos1 = pos1 + currDist * dir1;
-      if (debug)
-        printf("currPos1: %f\n", currPos1);
-       currPos2 = pos2 + currDist * dir2;
-      if (debug)
-        printf("currPos2: %f\n", currPos2);
-       currPos3 = pos3 + currDist * dir3;
-      if (debug)
-        printf("currPos3: %f\n", currPos3);
-       currPos4 = pos4 + currDist * dir4;
-      if (debug)
-        printf("currPos4: %f\n", currPos4);
-       currPos5 = pos5 + currDist * dir5;
-      if (debug)
-        printf("currPos5: %f\n", currPos5);
-       currPos6 = pos6 + currDist * dir6;
-      if (debug)
-        printf("currPos6: %f\n", currPos6);
-       currPos7 = pos7 + currDist * dir7;
-      if (debug)
-        printf("currPos7: %f\n", currPos7);
-       currPos8 = pos8 + currDist * dir8;
-      if (debug)
-        printf("currPos8: %f\n", currPos8);
-       currPos9 = pos9 + currDist * dir9;
-      if (debug)
-        printf("currPos9: %f\n", currPos9);
-      
-      if ((entry.farEnd0 - currPos0) * invdir0 < 0 ||
-              (entry.farEnd1 - currPos1) * invdir1 < 0 ||
-              (entry.farEnd2 - currPos2) * invdir2 < 0 ||
-              (entry.farEnd3 - currPos3) * invdir3 < 0 ||
-              (entry.farEnd4 - currPos4) * invdir4 < 0 ||
-              (entry.farEnd5 - currPos5) * invdir5 < 0 ||
-              (entry.farEnd6 - currPos6) * invdir6 < 0 ||
-              (entry.farEnd7 - currPos7) * invdir7 < 0 ||
-              (entry.farEnd8 - currPos8) * invdir8 < 0 ||
-              (entry.farEnd9 - currPos9) * invdir9 < 0 ||
-              
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+       currPos0 = pos0 + currDist * dir0;
+       currPos1 = pos1 + currDist * dir1;
+       currPos2 = pos2 + currDist * dir2;
+       currPos3 = pos3 + currDist * dir3;
+       currPos4 = pos4 + currDist * dir4;
+       currPos5 = pos5 + currDist * dir5;
+       currPos6 = pos6 + currDist * dir6;
+       currPos7 = pos7 + currDist * dir7;
+       currPos8 = pos8 + currDist * dir8;
+       currPos9 = pos9 + currDist * dir9;
+      
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | ((currPos7 >= entry.middle7) << 7) | ((currPos8 >= entry.middle8) << 8) | ((currPos9 >= entry.middle9) << 9) | 
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (((entry.farEnd0 - currPos0) * invdir0 >
+                               0) &&
+                ((entry.farEnd1 - currPos1) * invdir1 >
+                               0) &&
+                ((entry.farEnd2 - currPos2) * invdir2 >
+                               0) &&
+                ((entry.farEnd3 - currPos3) * invdir3 >
+                               0) &&
+                ((entry.farEnd4 - currPos4) * invdir4 >
+                               0) &&
+                ((entry.farEnd5 - currPos5) * invdir5 >
+                               0) &&
+                ((entry.farEnd6 - currPos6) * invdir6 >
+                               0) &&
+                ((entry.farEnd7 - currPos7) * invdir7 >
+                               0) &&
+                ((entry.farEnd8 - currPos8) * invdir8 >
+                               0) &&
+                ((entry.farEnd9 - currPos9) * invdir9 >
+                               0) &&
+                
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | ((currPos7 >= entry.middle7) << 7) | ((currPos8 >= entry.middle8) << 8) | ((currPos9 >= entry.middle9) << 9) | 
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-         child.middle0 =
-            1.5 * entry.middle0 - 0.5 * entry.farEnd0 +
-            (((entry.index & (1 << 0)) >> 0) ^ (invdir0 < 0)) *
-                (entry.farEnd0 - entry.middle0);
-        child.farEnd0 =
-            child.middle0 + (entry.farEnd0 - entry.middle0) / 2;
-         child.middle1 =
-            1.5 * entry.middle1 - 0.5 * entry.farEnd1 +
-            (((entry.index & (1 << 1)) >> 1) ^ (invdir1 < 0)) *
-                (entry.farEnd1 - entry.middle1);
-        child.farEnd1 =
-            child.middle1 + (entry.farEnd1 - entry.middle1) / 2;
-         child.middle2 =
-            1.5 * entry.middle2 - 0.5 * entry.farEnd2 +
-            (((entry.index & (1 << 2)) >> 2) ^ (invdir2 < 0)) *
-                (entry.farEnd2 - entry.middle2);
-        child.farEnd2 =
-            child.middle2 + (entry.farEnd2 - entry.middle2) / 2;
-         child.middle3 =
-            1.5 * entry.middle3 - 0.5 * entry.farEnd3 +
-            (((entry.index & (1 << 3)) >> 3) ^ (invdir3 < 0)) *
-                (entry.farEnd3 - entry.middle3);
-        child.farEnd3 =
-            child.middle3 + (entry.farEnd3 - entry.middle3) / 2;
-         child.middle4 =
-            1.5 * entry.middle4 - 0.5 * entry.farEnd4 +
-            (((entry.index & (1 << 4)) >> 4) ^ (invdir4 < 0)) *
-                (entry.farEnd4 - entry.middle4);
-        child.farEnd4 =
-            child.middle4 + (entry.farEnd4 - entry.middle4) / 2;
-         child.middle5 =
-            1.5 * entry.middle5 - 0.5 * entry.farEnd5 +
-            (((entry.index & (1 << 5)) >> 5) ^ (invdir5 < 0)) *
-                (entry.farEnd5 - entry.middle5);
-        child.farEnd5 =
-            child.middle5 + (entry.farEnd5 - entry.middle5) / 2;
-         child.middle6 =
-            1.5 * entry.middle6 - 0.5 * entry.farEnd6 +
-            (((entry.index & (1 << 6)) >> 6) ^ (invdir6 < 0)) *
-                (entry.farEnd6 - entry.middle6);
-        child.farEnd6 =
-            child.middle6 + (entry.farEnd6 - entry.middle6) / 2;
-         child.middle7 =
-            1.5 * entry.middle7 - 0.5 * entry.farEnd7 +
-            (((entry.index & (1 << 7)) >> 7) ^ (invdir7 < 0)) *
-                (entry.farEnd7 - entry.middle7);
-        child.farEnd7 =
-            child.middle7 + (entry.farEnd7 - entry.middle7) / 2;
-         child.middle8 =
-            1.5 * entry.middle8 - 0.5 * entry.farEnd8 +
-            (((entry.index & (1 << 8)) >> 8) ^ (invdir8 < 0)) *
-                (entry.farEnd8 - entry.middle8);
-        child.farEnd8 =
-            child.middle8 + (entry.farEnd8 - entry.middle8) / 2;
-         child.middle9 =
-            1.5 * entry.middle9 - 0.5 * entry.farEnd9 +
-            (((entry.index & (1 << 9)) >> 9) ^ (invdir9 < 0)) *
-                (entry.farEnd9 - entry.middle9);
-        child.farEnd9 =
-            child.middle9 + (entry.farEnd9 - entry.middle9) / 2;
+        StackEntry10 child;
+         if ((1 << 0) & diffIndex) {
+          makeChild10(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 0);
+        }
+         if ((1 << 1) & diffIndex) {
+          makeChild10(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 1);
+        }
+         if ((1 << 2) & diffIndex) {
+          makeChild10(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 2);
+        }
+         if ((1 << 3) & diffIndex) {
+          makeChild10(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 3);
+        }
+         if ((1 << 4) & diffIndex) {
+          makeChild10(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 4);
+        }
+         if ((1 << 5) & diffIndex) {
+          makeChild10(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 5);
+        }
+         if ((1 << 6) & diffIndex) {
+          makeChild10(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 6);
+        }
+         if ((1 << 7) & diffIndex) {
+          makeChild10(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 7);
+        }
+         if ((1 << 8) & diffIndex) {
+          makeChild10(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 8);
+        }
+         if ((1 << 9) & diffIndex) {
+          makeChild10(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 9);
+        }
         
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntry10 child;
+      makeChild10(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -4498,7 +3960,7 @@ bool rayBBox10( float pos0, float invdir0,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
    float t00 = (min0 - pos0) * invdir0;
@@ -4557,6 +4019,8 @@ bool traverseBVH10(__global uint *bvh,  float pos0,
                         float dir8, float invdir8,  float pos9,
                         float dir9, float invdir9, 
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[10];
    invdirArr[0] = invdir0;
    invdirArr[1] = invdir1;
@@ -4570,26 +4034,10 @@ bool traverseBVH10(__global uint *bvh,  float pos0,
    invdirArr[9] = invdir9;
   
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-     printf("invdir0: %f\n", invdir0);
-     printf("invdir1: %f\n", invdir1);
-     printf("invdir2: %f\n", invdir2);
-     printf("invdir3: %f\n", invdir3);
-     printf("invdir4: %f\n", invdir4);
-     printf("invdir5: %f\n", invdir5);
-     printf("invdir6: %f\n", invdir6);
-     printf("invdir7: %f\n", invdir7);
-     printf("invdir8: %f\n", invdir8);
-     printf("invdir9: %f\n", invdir9);
-    
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVH10: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
      float min0 = *floatBVH++;
@@ -4615,14 +4063,10 @@ bool traverseBVH10(__global uint *bvh,  float pos0,
     
     if (!rayBBox10(
              pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  pos6, invdir6, min6, max6,  pos7, invdir7, min7, max7,  pos8, invdir8, min8, max8,  pos9, invdir9, min9, max9,  0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctree10\n");
       if (traverseOctree10(currBvh + *currBvh,  pos0,
                                 dir0, invdir0,  pos1,
                                 dir1, invdir1,  pos2,
@@ -4654,8 +4098,6 @@ bool traverseBVH10(__global uint *bvh,  float pos0,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVH10\n\n\n\n\n");
   return false;
 }
 
@@ -4663,14 +4105,16 @@ __kernel void renderStd10(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
    float pos0 = pos[0];
   float dir0 = forward[0] + xoff * right[0] + yoff * up[0];
    float pos1 = pos[1];
@@ -4704,7 +4148,7 @@ __kernel void renderStd10(__global uint *bvh, __global float *pos,
    norm += dir8 * dir8;
    norm += dir9 * dir9;
   
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);
@@ -4746,7 +4190,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -4754,11 +4198,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -4817,6 +4256,120 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntry11 {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+   float middle0;
+  float farEnd0;
+   float middle1;
+  float farEnd1;
+   float middle2;
+  float farEnd2;
+   float middle3;
+  float farEnd3;
+   float middle4;
+  float farEnd4;
+   float middle5;
+  float farEnd5;
+   float middle6;
+  float farEnd6;
+   float middle7;
+  float farEnd7;
+   float middle8;
+  float farEnd8;
+   float middle9;
+  float farEnd9;
+   float middle10;
+  float farEnd10;
+  
+} StackEntry11;
+
+void makeChild11(const StackEntry11 *parent, size_t index,
+                      StackEntry11 *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+   child->middle0 =
+      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
+      (((index & (1 << 0)) >> 0) ^
+       (parent->farEnd0 < parent->middle0)) *
+          (parent->farEnd0 - parent->middle0);
+  child->farEnd0 =
+      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
+   child->middle1 =
+      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
+      (((index & (1 << 1)) >> 1) ^
+       (parent->farEnd1 < parent->middle1)) *
+          (parent->farEnd1 - parent->middle1);
+  child->farEnd1 =
+      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
+   child->middle2 =
+      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
+      (((index & (1 << 2)) >> 2) ^
+       (parent->farEnd2 < parent->middle2)) *
+          (parent->farEnd2 - parent->middle2);
+  child->farEnd2 =
+      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
+   child->middle3 =
+      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
+      (((index & (1 << 3)) >> 3) ^
+       (parent->farEnd3 < parent->middle3)) *
+          (parent->farEnd3 - parent->middle3);
+  child->farEnd3 =
+      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
+   child->middle4 =
+      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
+      (((index & (1 << 4)) >> 4) ^
+       (parent->farEnd4 < parent->middle4)) *
+          (parent->farEnd4 - parent->middle4);
+  child->farEnd4 =
+      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
+   child->middle5 =
+      1.5f * parent->middle5 - 0.5f * parent->farEnd5 +
+      (((index & (1 << 5)) >> 5) ^
+       (parent->farEnd5 < parent->middle5)) *
+          (parent->farEnd5 - parent->middle5);
+  child->farEnd5 =
+      child->middle5 + (parent->farEnd5 - parent->middle5) / 2;
+   child->middle6 =
+      1.5f * parent->middle6 - 0.5f * parent->farEnd6 +
+      (((index & (1 << 6)) >> 6) ^
+       (parent->farEnd6 < parent->middle6)) *
+          (parent->farEnd6 - parent->middle6);
+  child->farEnd6 =
+      child->middle6 + (parent->farEnd6 - parent->middle6) / 2;
+   child->middle7 =
+      1.5f * parent->middle7 - 0.5f * parent->farEnd7 +
+      (((index & (1 << 7)) >> 7) ^
+       (parent->farEnd7 < parent->middle7)) *
+          (parent->farEnd7 - parent->middle7);
+  child->farEnd7 =
+      child->middle7 + (parent->farEnd7 - parent->middle7) / 2;
+   child->middle8 =
+      1.5f * parent->middle8 - 0.5f * parent->farEnd8 +
+      (((index & (1 << 8)) >> 8) ^
+       (parent->farEnd8 < parent->middle8)) *
+          (parent->farEnd8 - parent->middle8);
+  child->farEnd8 =
+      child->middle8 + (parent->farEnd8 - parent->middle8) / 2;
+   child->middle9 =
+      1.5f * parent->middle9 - 0.5f * parent->farEnd9 +
+      (((index & (1 << 9)) >> 9) ^
+       (parent->farEnd9 < parent->middle9)) *
+          (parent->farEnd9 - parent->middle9);
+  child->farEnd9 =
+      child->middle9 + (parent->farEnd9 - parent->middle9) / 2;
+   child->middle10 =
+      1.5f * parent->middle10 - 0.5f * parent->farEnd10 +
+      (((index & (1 << 10)) >> 10) ^
+       (parent->farEnd10 < parent->middle10)) *
+          (parent->farEnd10 - parent->middle10);
+  child->farEnd10 =
+      child->middle10 + (parent->farEnd10 - parent->middle10) / 2;
+  
+}
+
 bool traverseOctree11(__global uint *octree,
                             float pos0, float dir0,
                            float invdir0,  float pos1, float dir1,
@@ -4847,7 +4400,7 @@ bool traverseOctree11(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
    float t00 = (origin0 - pos0) * invdir0;
   float t10 = (origin0 + sidelength - pos0) * invdir0;
@@ -4898,7 +4451,7 @@ bool traverseOctree11(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
    float currPos0 = pos0 + currDist * dir0;
    float currPos1 = pos1 + currDist * dir1;
    float currPos2 = pos2 + currDist * dir2;
@@ -4912,38 +4465,10 @@ bool traverseOctree11(__global uint *octree,
    float currPos10 = pos10 + currDist * dir10;
   
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-     float middle0;
-    float farEnd0;
-     float middle1;
-    float farEnd1;
-     float middle2;
-    float farEnd2;
-     float middle3;
-    float farEnd3;
-     float middle4;
-    float farEnd4;
-     float middle5;
-    float farEnd5;
-     float middle6;
-    float farEnd6;
-     float middle7;
-    float farEnd7;
-     float middle8;
-    float farEnd8;
-     float middle9;
-    float farEnd9;
-     float middle10;
-    float farEnd10;
-    
-  } stack[64];
+  StackEntry11 stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntry11 baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
    baseEntry.middle0 = origin0 + sidelength / 2;
   baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
@@ -4969,319 +4494,156 @@ bool traverseOctree11(__global uint *octree,
   baseEntry.farEnd10 = origin10 + (invdir10 > 0) * sidelength;
   
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info:  entry.middle0: %f, "
-             "entry.farEnd0: %f, currPos0: %f\n  entry.middle1: %f, "
-             "entry.farEnd1: %f, currPos1: %f\n  entry.middle2: %f, "
-             "entry.farEnd2: %f, currPos2: %f\n  entry.middle3: %f, "
-             "entry.farEnd3: %f, currPos3: %f\n  entry.middle4: %f, "
-             "entry.farEnd4: %f, currPos4: %f\n  entry.middle5: %f, "
-             "entry.farEnd5: %f, currPos5: %f\n  entry.middle6: %f, "
-             "entry.farEnd6: %f, currPos6: %f\n  entry.middle7: %f, "
-             "entry.farEnd7: %f, currPos7: %f\n  entry.middle8: %f, "
-             "entry.farEnd8: %f, currPos8: %f\n  entry.middle9: %f, "
-             "entry.farEnd9: %f, currPos9: %f\n  entry.middle10: %f, "
-             "entry.farEnd10: %f, currPos10: %f\n ",
-              entry.middle0, entry.farEnd0, currPos0,
-              entry.middle1, entry.farEnd1, currPos1,
-              entry.middle2, entry.farEnd2, currPos2,
-              entry.middle3, entry.farEnd3, currPos3,
-              entry.middle4, entry.farEnd4, currPos4,
-              entry.middle5, entry.farEnd5, currPos5,
-              entry.middle6, entry.farEnd6, currPos6,
-              entry.middle7, entry.farEnd7, currPos7,
-              entry.middle8, entry.farEnd8, currPos8,
-              entry.middle9, entry.farEnd9, currPos9,
-              entry.middle10, entry.farEnd10, currPos10,
-             
-             0);
-    }
-    if (entry.processed) {
+    StackEntry11 entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
+      }
       float minStep = FLT_MAX;
-      float val1, val2;
-       val1 = (entry.middle0 - currPos0) * invdir0;
-      val2 = (entry.farEnd0 - currPos0) * invdir0;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle1 - currPos1) * invdir1;
-      val2 = (entry.farEnd1 - currPos1) * invdir1;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle2 - currPos2) * invdir2;
-      val2 = (entry.farEnd2 - currPos2) * invdir2;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle3 - currPos3) * invdir3;
-      val2 = (entry.farEnd3 - currPos3) * invdir3;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle4 - currPos4) * invdir4;
-      val2 = (entry.farEnd4 - currPos4) * invdir4;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle5 - currPos5) * invdir5;
-      val2 = (entry.farEnd5 - currPos5) * invdir5;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle6 - currPos6) * invdir6;
-      val2 = (entry.farEnd6 - currPos6) * invdir6;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle7 - currPos7) * invdir7;
-      val2 = (entry.farEnd7 - currPos7) * invdir7;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle8 - currPos8) * invdir8;
-      val2 = (entry.farEnd8 - currPos8) * invdir8;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle9 - currPos9) * invdir9;
-      val2 = (entry.farEnd9 - currPos9) * invdir9;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle10 - currPos10) * invdir10;
-      val2 = (entry.farEnd10 - currPos10) * invdir10;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
+       minStep =
+          min(minStep, (entry.farEnd0 - currPos0) * invdir0);
+       minStep =
+          min(minStep, (entry.farEnd1 - currPos1) * invdir1);
+       minStep =
+          min(minStep, (entry.farEnd2 - currPos2) * invdir2);
+       minStep =
+          min(minStep, (entry.farEnd3 - currPos3) * invdir3);
+       minStep =
+          min(minStep, (entry.farEnd4 - currPos4) * invdir4);
+       minStep =
+          min(minStep, (entry.farEnd5 - currPos5) * invdir5);
+       minStep =
+          min(minStep, (entry.farEnd6 - currPos6) * invdir6);
+       minStep =
+          min(minStep, (entry.farEnd7 - currPos7) * invdir7);
+       minStep =
+          min(minStep, (entry.farEnd8 - currPos8) * invdir8);
+       minStep =
+          min(minStep, (entry.farEnd9 - currPos9) * invdir9);
+       minStep =
+          min(minStep, (entry.farEnd10 - currPos10) * invdir10);
       
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-       currPos0 = pos0 + currDist * dir0;
-      if (debug)
-        printf("currPos0: %f\n", currPos0);
-       currPos1 = pos1 + currDist * dir1;
-      if (debug)
-        printf("currPos1: %f\n", currPos1);
-       currPos2 = pos2 + currDist * dir2;
-      if (debug)
-        printf("currPos2: %f\n", currPos2);
-       currPos3 = pos3 + currDist * dir3;
-      if (debug)
-        printf("currPos3: %f\n", currPos3);
-       currPos4 = pos4 + currDist * dir4;
-      if (debug)
-        printf("currPos4: %f\n", currPos4);
-       currPos5 = pos5 + currDist * dir5;
-      if (debug)
-        printf("currPos5: %f\n", currPos5);
-       currPos6 = pos6 + currDist * dir6;
-      if (debug)
-        printf("currPos6: %f\n", currPos6);
-       currPos7 = pos7 + currDist * dir7;
-      if (debug)
-        printf("currPos7: %f\n", currPos7);
-       currPos8 = pos8 + currDist * dir8;
-      if (debug)
-        printf("currPos8: %f\n", currPos8);
-       currPos9 = pos9 + currDist * dir9;
-      if (debug)
-        printf("currPos9: %f\n", currPos9);
-       currPos10 = pos10 + currDist * dir10;
-      if (debug)
-        printf("currPos10: %f\n", currPos10);
-      
-      if ((entry.farEnd0 - currPos0) * invdir0 < 0 ||
-              (entry.farEnd1 - currPos1) * invdir1 < 0 ||
-              (entry.farEnd2 - currPos2) * invdir2 < 0 ||
-              (entry.farEnd3 - currPos3) * invdir3 < 0 ||
-              (entry.farEnd4 - currPos4) * invdir4 < 0 ||
-              (entry.farEnd5 - currPos5) * invdir5 < 0 ||
-              (entry.farEnd6 - currPos6) * invdir6 < 0 ||
-              (entry.farEnd7 - currPos7) * invdir7 < 0 ||
-              (entry.farEnd8 - currPos8) * invdir8 < 0 ||
-              (entry.farEnd9 - currPos9) * invdir9 < 0 ||
-              (entry.farEnd10 - currPos10) * invdir10 < 0 ||
-              
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+       currPos0 = pos0 + currDist * dir0;
+       currPos1 = pos1 + currDist * dir1;
+       currPos2 = pos2 + currDist * dir2;
+       currPos3 = pos3 + currDist * dir3;
+       currPos4 = pos4 + currDist * dir4;
+       currPos5 = pos5 + currDist * dir5;
+       currPos6 = pos6 + currDist * dir6;
+       currPos7 = pos7 + currDist * dir7;
+       currPos8 = pos8 + currDist * dir8;
+       currPos9 = pos9 + currDist * dir9;
+       currPos10 = pos10 + currDist * dir10;
+      
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | ((currPos7 >= entry.middle7) << 7) | ((currPos8 >= entry.middle8) << 8) | ((currPos9 >= entry.middle9) << 9) | ((currPos10 >= entry.middle10) << 10) | 
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (((entry.farEnd0 - currPos0) * invdir0 >
+                               0) &&
+                ((entry.farEnd1 - currPos1) * invdir1 >
+                               0) &&
+                ((entry.farEnd2 - currPos2) * invdir2 >
+                               0) &&
+                ((entry.farEnd3 - currPos3) * invdir3 >
+                               0) &&
+                ((entry.farEnd4 - currPos4) * invdir4 >
+                               0) &&
+                ((entry.farEnd5 - currPos5) * invdir5 >
+                               0) &&
+                ((entry.farEnd6 - currPos6) * invdir6 >
+                               0) &&
+                ((entry.farEnd7 - currPos7) * invdir7 >
+                               0) &&
+                ((entry.farEnd8 - currPos8) * invdir8 >
+                               0) &&
+                ((entry.farEnd9 - currPos9) * invdir9 >
+                               0) &&
+                ((entry.farEnd10 - currPos10) * invdir10 >
+                               0) &&
+                
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | ((currPos7 >= entry.middle7) << 7) | ((currPos8 >= entry.middle8) << 8) | ((currPos9 >= entry.middle9) << 9) | ((currPos10 >= entry.middle10) << 10) | 
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-         child.middle0 =
-            1.5 * entry.middle0 - 0.5 * entry.farEnd0 +
-            (((entry.index & (1 << 0)) >> 0) ^ (invdir0 < 0)) *
-                (entry.farEnd0 - entry.middle0);
-        child.farEnd0 =
-            child.middle0 + (entry.farEnd0 - entry.middle0) / 2;
-         child.middle1 =
-            1.5 * entry.middle1 - 0.5 * entry.farEnd1 +
-            (((entry.index & (1 << 1)) >> 1) ^ (invdir1 < 0)) *
-                (entry.farEnd1 - entry.middle1);
-        child.farEnd1 =
-            child.middle1 + (entry.farEnd1 - entry.middle1) / 2;
-         child.middle2 =
-            1.5 * entry.middle2 - 0.5 * entry.farEnd2 +
-            (((entry.index & (1 << 2)) >> 2) ^ (invdir2 < 0)) *
-                (entry.farEnd2 - entry.middle2);
-        child.farEnd2 =
-            child.middle2 + (entry.farEnd2 - entry.middle2) / 2;
-         child.middle3 =
-            1.5 * entry.middle3 - 0.5 * entry.farEnd3 +
-            (((entry.index & (1 << 3)) >> 3) ^ (invdir3 < 0)) *
-                (entry.farEnd3 - entry.middle3);
-        child.farEnd3 =
-            child.middle3 + (entry.farEnd3 - entry.middle3) / 2;
-         child.middle4 =
-            1.5 * entry.middle4 - 0.5 * entry.farEnd4 +
-            (((entry.index & (1 << 4)) >> 4) ^ (invdir4 < 0)) *
-                (entry.farEnd4 - entry.middle4);
-        child.farEnd4 =
-            child.middle4 + (entry.farEnd4 - entry.middle4) / 2;
-         child.middle5 =
-            1.5 * entry.middle5 - 0.5 * entry.farEnd5 +
-            (((entry.index & (1 << 5)) >> 5) ^ (invdir5 < 0)) *
-                (entry.farEnd5 - entry.middle5);
-        child.farEnd5 =
-            child.middle5 + (entry.farEnd5 - entry.middle5) / 2;
-         child.middle6 =
-            1.5 * entry.middle6 - 0.5 * entry.farEnd6 +
-            (((entry.index & (1 << 6)) >> 6) ^ (invdir6 < 0)) *
-                (entry.farEnd6 - entry.middle6);
-        child.farEnd6 =
-            child.middle6 + (entry.farEnd6 - entry.middle6) / 2;
-         child.middle7 =
-            1.5 * entry.middle7 - 0.5 * entry.farEnd7 +
-            (((entry.index & (1 << 7)) >> 7) ^ (invdir7 < 0)) *
-                (entry.farEnd7 - entry.middle7);
-        child.farEnd7 =
-            child.middle7 + (entry.farEnd7 - entry.middle7) / 2;
-         child.middle8 =
-            1.5 * entry.middle8 - 0.5 * entry.farEnd8 +
-            (((entry.index & (1 << 8)) >> 8) ^ (invdir8 < 0)) *
-                (entry.farEnd8 - entry.middle8);
-        child.farEnd8 =
-            child.middle8 + (entry.farEnd8 - entry.middle8) / 2;
-         child.middle9 =
-            1.5 * entry.middle9 - 0.5 * entry.farEnd9 +
-            (((entry.index & (1 << 9)) >> 9) ^ (invdir9 < 0)) *
-                (entry.farEnd9 - entry.middle9);
-        child.farEnd9 =
-            child.middle9 + (entry.farEnd9 - entry.middle9) / 2;
-         child.middle10 =
-            1.5 * entry.middle10 - 0.5 * entry.farEnd10 +
-            (((entry.index & (1 << 10)) >> 10) ^ (invdir10 < 0)) *
-                (entry.farEnd10 - entry.middle10);
-        child.farEnd10 =
-            child.middle10 + (entry.farEnd10 - entry.middle10) / 2;
+        StackEntry11 child;
+         if ((1 << 0) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 0);
+        }
+         if ((1 << 1) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 1);
+        }
+         if ((1 << 2) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 2);
+        }
+         if ((1 << 3) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 3);
+        }
+         if ((1 << 4) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 4);
+        }
+         if ((1 << 5) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 5);
+        }
+         if ((1 << 6) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 6);
+        }
+         if ((1 << 7) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 7);
+        }
+         if ((1 << 8) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 8);
+        }
+         if ((1 << 9) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 9);
+        }
+         if ((1 << 10) & diffIndex) {
+          makeChild11(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 10);
+        }
         
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntry11 child;
+      makeChild11(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -5300,7 +4662,7 @@ bool rayBBox11( float pos0, float invdir0,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
    float t00 = (min0 - pos0) * invdir0;
@@ -5364,6 +4726,8 @@ bool traverseBVH11(__global uint *bvh,  float pos0,
                         float dir9, float invdir9,  float pos10,
                         float dir10, float invdir10, 
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[11];
    invdirArr[0] = invdir0;
    invdirArr[1] = invdir1;
@@ -5378,27 +4742,10 @@ bool traverseBVH11(__global uint *bvh,  float pos0,
    invdirArr[10] = invdir10;
   
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-     printf("invdir0: %f\n", invdir0);
-     printf("invdir1: %f\n", invdir1);
-     printf("invdir2: %f\n", invdir2);
-     printf("invdir3: %f\n", invdir3);
-     printf("invdir4: %f\n", invdir4);
-     printf("invdir5: %f\n", invdir5);
-     printf("invdir6: %f\n", invdir6);
-     printf("invdir7: %f\n", invdir7);
-     printf("invdir8: %f\n", invdir8);
-     printf("invdir9: %f\n", invdir9);
-     printf("invdir10: %f\n", invdir10);
-    
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVH11: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
      float min0 = *floatBVH++;
@@ -5426,14 +4773,10 @@ bool traverseBVH11(__global uint *bvh,  float pos0,
     
     if (!rayBBox11(
              pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  pos6, invdir6, min6, max6,  pos7, invdir7, min7, max7,  pos8, invdir8, min8, max8,  pos9, invdir9, min9, max9,  pos10, invdir10, min10, max10,  0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctree11\n");
       if (traverseOctree11(currBvh + *currBvh,  pos0,
                                 dir0, invdir0,  pos1,
                                 dir1, invdir1,  pos2,
@@ -5466,8 +4809,6 @@ bool traverseBVH11(__global uint *bvh,  float pos0,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVH11\n\n\n\n\n");
   return false;
 }
 
@@ -5475,14 +4816,16 @@ __kernel void renderStd11(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
    float pos0 = pos[0];
   float dir0 = forward[0] + xoff * right[0] + yoff * up[0];
    float pos1 = pos[1];
@@ -5519,7 +4862,7 @@ __kernel void renderStd11(__global uint *bvh, __global float *pos,
    norm += dir9 * dir9;
    norm += dir10 * dir10;
   
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);
@@ -5563,7 +4906,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -5571,11 +4914,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -5634,6 +4972,129 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntry12 {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+   float middle0;
+  float farEnd0;
+   float middle1;
+  float farEnd1;
+   float middle2;
+  float farEnd2;
+   float middle3;
+  float farEnd3;
+   float middle4;
+  float farEnd4;
+   float middle5;
+  float farEnd5;
+   float middle6;
+  float farEnd6;
+   float middle7;
+  float farEnd7;
+   float middle8;
+  float farEnd8;
+   float middle9;
+  float farEnd9;
+   float middle10;
+  float farEnd10;
+   float middle11;
+  float farEnd11;
+  
+} StackEntry12;
+
+void makeChild12(const StackEntry12 *parent, size_t index,
+                      StackEntry12 *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+   child->middle0 =
+      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
+      (((index & (1 << 0)) >> 0) ^
+       (parent->farEnd0 < parent->middle0)) *
+          (parent->farEnd0 - parent->middle0);
+  child->farEnd0 =
+      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
+   child->middle1 =
+      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
+      (((index & (1 << 1)) >> 1) ^
+       (parent->farEnd1 < parent->middle1)) *
+          (parent->farEnd1 - parent->middle1);
+  child->farEnd1 =
+      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
+   child->middle2 =
+      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
+      (((index & (1 << 2)) >> 2) ^
+       (parent->farEnd2 < parent->middle2)) *
+          (parent->farEnd2 - parent->middle2);
+  child->farEnd2 =
+      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
+   child->middle3 =
+      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
+      (((index & (1 << 3)) >> 3) ^
+       (parent->farEnd3 < parent->middle3)) *
+          (parent->farEnd3 - parent->middle3);
+  child->farEnd3 =
+      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
+   child->middle4 =
+      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
+      (((index & (1 << 4)) >> 4) ^
+       (parent->farEnd4 < parent->middle4)) *
+          (parent->farEnd4 - parent->middle4);
+  child->farEnd4 =
+      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
+   child->middle5 =
+      1.5f * parent->middle5 - 0.5f * parent->farEnd5 +
+      (((index & (1 << 5)) >> 5) ^
+       (parent->farEnd5 < parent->middle5)) *
+          (parent->farEnd5 - parent->middle5);
+  child->farEnd5 =
+      child->middle5 + (parent->farEnd5 - parent->middle5) / 2;
+   child->middle6 =
+      1.5f * parent->middle6 - 0.5f * parent->farEnd6 +
+      (((index & (1 << 6)) >> 6) ^
+       (parent->farEnd6 < parent->middle6)) *
+          (parent->farEnd6 - parent->middle6);
+  child->farEnd6 =
+      child->middle6 + (parent->farEnd6 - parent->middle6) / 2;
+   child->middle7 =
+      1.5f * parent->middle7 - 0.5f * parent->farEnd7 +
+      (((index & (1 << 7)) >> 7) ^
+       (parent->farEnd7 < parent->middle7)) *
+          (parent->farEnd7 - parent->middle7);
+  child->farEnd7 =
+      child->middle7 + (parent->farEnd7 - parent->middle7) / 2;
+   child->middle8 =
+      1.5f * parent->middle8 - 0.5f * parent->farEnd8 +
+      (((index & (1 << 8)) >> 8) ^
+       (parent->farEnd8 < parent->middle8)) *
+          (parent->farEnd8 - parent->middle8);
+  child->farEnd8 =
+      child->middle8 + (parent->farEnd8 - parent->middle8) / 2;
+   child->middle9 =
+      1.5f * parent->middle9 - 0.5f * parent->farEnd9 +
+      (((index & (1 << 9)) >> 9) ^
+       (parent->farEnd9 < parent->middle9)) *
+          (parent->farEnd9 - parent->middle9);
+  child->farEnd9 =
+      child->middle9 + (parent->farEnd9 - parent->middle9) / 2;
+   child->middle10 =
+      1.5f * parent->middle10 - 0.5f * parent->farEnd10 +
+      (((index & (1 << 10)) >> 10) ^
+       (parent->farEnd10 < parent->middle10)) *
+          (parent->farEnd10 - parent->middle10);
+  child->farEnd10 =
+      child->middle10 + (parent->farEnd10 - parent->middle10) / 2;
+   child->middle11 =
+      1.5f * parent->middle11 - 0.5f * parent->farEnd11 +
+      (((index & (1 << 11)) >> 11) ^
+       (parent->farEnd11 < parent->middle11)) *
+          (parent->farEnd11 - parent->middle11);
+  child->farEnd11 =
+      child->middle11 + (parent->farEnd11 - parent->middle11) / 2;
+  
+}
+
 bool traverseOctree12(__global uint *octree,
                             float pos0, float dir0,
                            float invdir0,  float pos1, float dir1,
@@ -5666,7 +5127,7 @@ bool traverseOctree12(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
    float t00 = (origin0 - pos0) * invdir0;
   float t10 = (origin0 + sidelength - pos0) * invdir0;
@@ -5721,7 +5182,7 @@ bool traverseOctree12(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
    float currPos0 = pos0 + currDist * dir0;
    float currPos1 = pos1 + currDist * dir1;
    float currPos2 = pos2 + currDist * dir2;
@@ -5736,40 +5197,10 @@ bool traverseOctree12(__global uint *octree,
    float currPos11 = pos11 + currDist * dir11;
   
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-     float middle0;
-    float farEnd0;
-     float middle1;
-    float farEnd1;
-     float middle2;
-    float farEnd2;
-     float middle3;
-    float farEnd3;
-     float middle4;
-    float farEnd4;
-     float middle5;
-    float farEnd5;
-     float middle6;
-    float farEnd6;
-     float middle7;
-    float farEnd7;
-     float middle8;
-    float farEnd8;
-     float middle9;
-    float farEnd9;
-     float middle10;
-    float farEnd10;
-     float middle11;
-    float farEnd11;
-    
-  } stack[64];
+  StackEntry12 stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntry12 baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
    baseEntry.middle0 = origin0 + sidelength / 2;
   baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
@@ -5797,342 +5228,166 @@ bool traverseOctree12(__global uint *octree,
   baseEntry.farEnd11 = origin11 + (invdir11 > 0) * sidelength;
   
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info:  entry.middle0: %f, "
-             "entry.farEnd0: %f, currPos0: %f\n  entry.middle1: %f, "
-             "entry.farEnd1: %f, currPos1: %f\n  entry.middle2: %f, "
-             "entry.farEnd2: %f, currPos2: %f\n  entry.middle3: %f, "
-             "entry.farEnd3: %f, currPos3: %f\n  entry.middle4: %f, "
-             "entry.farEnd4: %f, currPos4: %f\n  entry.middle5: %f, "
-             "entry.farEnd5: %f, currPos5: %f\n  entry.middle6: %f, "
-             "entry.farEnd6: %f, currPos6: %f\n  entry.middle7: %f, "
-             "entry.farEnd7: %f, currPos7: %f\n  entry.middle8: %f, "
-             "entry.farEnd8: %f, currPos8: %f\n  entry.middle9: %f, "
-             "entry.farEnd9: %f, currPos9: %f\n  entry.middle10: %f, "
-             "entry.farEnd10: %f, currPos10: %f\n  entry.middle11: %f, "
-             "entry.farEnd11: %f, currPos11: %f\n ",
-              entry.middle0, entry.farEnd0, currPos0,
-              entry.middle1, entry.farEnd1, currPos1,
-              entry.middle2, entry.farEnd2, currPos2,
-              entry.middle3, entry.farEnd3, currPos3,
-              entry.middle4, entry.farEnd4, currPos4,
-              entry.middle5, entry.farEnd5, currPos5,
-              entry.middle6, entry.farEnd6, currPos6,
-              entry.middle7, entry.farEnd7, currPos7,
-              entry.middle8, entry.farEnd8, currPos8,
-              entry.middle9, entry.farEnd9, currPos9,
-              entry.middle10, entry.farEnd10, currPos10,
-              entry.middle11, entry.farEnd11, currPos11,
-             
-             0);
-    }
-    if (entry.processed) {
+    StackEntry12 entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
+      }
       float minStep = FLT_MAX;
-      float val1, val2;
-       val1 = (entry.middle0 - currPos0) * invdir0;
-      val2 = (entry.farEnd0 - currPos0) * invdir0;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle1 - currPos1) * invdir1;
-      val2 = (entry.farEnd1 - currPos1) * invdir1;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle2 - currPos2) * invdir2;
-      val2 = (entry.farEnd2 - currPos2) * invdir2;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle3 - currPos3) * invdir3;
-      val2 = (entry.farEnd3 - currPos3) * invdir3;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle4 - currPos4) * invdir4;
-      val2 = (entry.farEnd4 - currPos4) * invdir4;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle5 - currPos5) * invdir5;
-      val2 = (entry.farEnd5 - currPos5) * invdir5;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle6 - currPos6) * invdir6;
-      val2 = (entry.farEnd6 - currPos6) * invdir6;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle7 - currPos7) * invdir7;
-      val2 = (entry.farEnd7 - currPos7) * invdir7;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle8 - currPos8) * invdir8;
-      val2 = (entry.farEnd8 - currPos8) * invdir8;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle9 - currPos9) * invdir9;
-      val2 = (entry.farEnd9 - currPos9) * invdir9;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle10 - currPos10) * invdir10;
-      val2 = (entry.farEnd10 - currPos10) * invdir10;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
-       val1 = (entry.middle11 - currPos11) * invdir11;
-      val2 = (entry.farEnd11 - currPos11) * invdir11;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
-      }
+       minStep =
+          min(minStep, (entry.farEnd0 - currPos0) * invdir0);
+       minStep =
+          min(minStep, (entry.farEnd1 - currPos1) * invdir1);
+       minStep =
+          min(minStep, (entry.farEnd2 - currPos2) * invdir2);
+       minStep =
+          min(minStep, (entry.farEnd3 - currPos3) * invdir3);
+       minStep =
+          min(minStep, (entry.farEnd4 - currPos4) * invdir4);
+       minStep =
+          min(minStep, (entry.farEnd5 - currPos5) * invdir5);
+       minStep =
+          min(minStep, (entry.farEnd6 - currPos6) * invdir6);
+       minStep =
+          min(minStep, (entry.farEnd7 - currPos7) * invdir7);
+       minStep =
+          min(minStep, (entry.farEnd8 - currPos8) * invdir8);
+       minStep =
+          min(minStep, (entry.farEnd9 - currPos9) * invdir9);
+       minStep =
+          min(minStep, (entry.farEnd10 - currPos10) * invdir10);
+       minStep =
+          min(minStep, (entry.farEnd11 - currPos11) * invdir11);
       
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-       currPos0 = pos0 + currDist * dir0;
-      if (debug)
-        printf("currPos0: %f\n", currPos0);
-       currPos1 = pos1 + currDist * dir1;
-      if (debug)
-        printf("currPos1: %f\n", currPos1);
-       currPos2 = pos2 + currDist * dir2;
-      if (debug)
-        printf("currPos2: %f\n", currPos2);
-       currPos3 = pos3 + currDist * dir3;
-      if (debug)
-        printf("currPos3: %f\n", currPos3);
-       currPos4 = pos4 + currDist * dir4;
-      if (debug)
-        printf("currPos4: %f\n", currPos4);
-       currPos5 = pos5 + currDist * dir5;
-      if (debug)
-        printf("currPos5: %f\n", currPos5);
-       currPos6 = pos6 + currDist * dir6;
-      if (debug)
-        printf("currPos6: %f\n", currPos6);
-       currPos7 = pos7 + currDist * dir7;
-      if (debug)
-        printf("currPos7: %f\n", currPos7);
-       currPos8 = pos8 + currDist * dir8;
-      if (debug)
-        printf("currPos8: %f\n", currPos8);
-       currPos9 = pos9 + currDist * dir9;
-      if (debug)
-        printf("currPos9: %f\n", currPos9);
-       currPos10 = pos10 + currDist * dir10;
-      if (debug)
-        printf("currPos10: %f\n", currPos10);
-       currPos11 = pos11 + currDist * dir11;
-      if (debug)
-        printf("currPos11: %f\n", currPos11);
-      
-      if ((entry.farEnd0 - currPos0) * invdir0 < 0 ||
-              (entry.farEnd1 - currPos1) * invdir1 < 0 ||
-              (entry.farEnd2 - currPos2) * invdir2 < 0 ||
-              (entry.farEnd3 - currPos3) * invdir3 < 0 ||
-              (entry.farEnd4 - currPos4) * invdir4 < 0 ||
-              (entry.farEnd5 - currPos5) * invdir5 < 0 ||
-              (entry.farEnd6 - currPos6) * invdir6 < 0 ||
-              (entry.farEnd7 - currPos7) * invdir7 < 0 ||
-              (entry.farEnd8 - currPos8) * invdir8 < 0 ||
-              (entry.farEnd9 - currPos9) * invdir9 < 0 ||
-              (entry.farEnd10 - currPos10) * invdir10 < 0 ||
-              (entry.farEnd11 - currPos11) * invdir11 < 0 ||
-              
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+       currPos0 = pos0 + currDist * dir0;
+       currPos1 = pos1 + currDist * dir1;
+       currPos2 = pos2 + currDist * dir2;
+       currPos3 = pos3 + currDist * dir3;
+       currPos4 = pos4 + currDist * dir4;
+       currPos5 = pos5 + currDist * dir5;
+       currPos6 = pos6 + currDist * dir6;
+       currPos7 = pos7 + currDist * dir7;
+       currPos8 = pos8 + currDist * dir8;
+       currPos9 = pos9 + currDist * dir9;
+       currPos10 = pos10 + currDist * dir10;
+       currPos11 = pos11 + currDist * dir11;
+      
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | ((currPos7 >= entry.middle7) << 7) | ((currPos8 >= entry.middle8) << 8) | ((currPos9 >= entry.middle9) << 9) | ((currPos10 >= entry.middle10) << 10) | ((currPos11 >= entry.middle11) << 11) | 
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (((entry.farEnd0 - currPos0) * invdir0 >
+                               0) &&
+                ((entry.farEnd1 - currPos1) * invdir1 >
+                               0) &&
+                ((entry.farEnd2 - currPos2) * invdir2 >
+                               0) &&
+                ((entry.farEnd3 - currPos3) * invdir3 >
+                               0) &&
+                ((entry.farEnd4 - currPos4) * invdir4 >
+                               0) &&
+                ((entry.farEnd5 - currPos5) * invdir5 >
+                               0) &&
+                ((entry.farEnd6 - currPos6) * invdir6 >
+                               0) &&
+                ((entry.farEnd7 - currPos7) * invdir7 >
+                               0) &&
+                ((entry.farEnd8 - currPos8) * invdir8 >
+                               0) &&
+                ((entry.farEnd9 - currPos9) * invdir9 >
+                               0) &&
+                ((entry.farEnd10 - currPos10) * invdir10 >
+                               0) &&
+                ((entry.farEnd11 - currPos11) * invdir11 >
+                               0) &&
+                
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            ((currPos0 >= entry.middle0) << 0) | ((currPos1 >= entry.middle1) << 1) | ((currPos2 >= entry.middle2) << 2) | ((currPos3 >= entry.middle3) << 3) | ((currPos4 >= entry.middle4) << 4) | ((currPos5 >= entry.middle5) << 5) | ((currPos6 >= entry.middle6) << 6) | ((currPos7 >= entry.middle7) << 7) | ((currPos8 >= entry.middle8) << 8) | ((currPos9 >= entry.middle9) << 9) | ((currPos10 >= entry.middle10) << 10) | ((currPos11 >= entry.middle11) << 11) | 
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-         child.middle0 =
-            1.5 * entry.middle0 - 0.5 * entry.farEnd0 +
-            (((entry.index & (1 << 0)) >> 0) ^ (invdir0 < 0)) *
-                (entry.farEnd0 - entry.middle0);
-        child.farEnd0 =
-            child.middle0 + (entry.farEnd0 - entry.middle0) / 2;
-         child.middle1 =
-            1.5 * entry.middle1 - 0.5 * entry.farEnd1 +
-            (((entry.index & (1 << 1)) >> 1) ^ (invdir1 < 0)) *
-                (entry.farEnd1 - entry.middle1);
-        child.farEnd1 =
-            child.middle1 + (entry.farEnd1 - entry.middle1) / 2;
-         child.middle2 =
-            1.5 * entry.middle2 - 0.5 * entry.farEnd2 +
-            (((entry.index & (1 << 2)) >> 2) ^ (invdir2 < 0)) *
-                (entry.farEnd2 - entry.middle2);
-        child.farEnd2 =
-            child.middle2 + (entry.farEnd2 - entry.middle2) / 2;
-         child.middle3 =
-            1.5 * entry.middle3 - 0.5 * entry.farEnd3 +
-            (((entry.index & (1 << 3)) >> 3) ^ (invdir3 < 0)) *
-                (entry.farEnd3 - entry.middle3);
-        child.farEnd3 =
-            child.middle3 + (entry.farEnd3 - entry.middle3) / 2;
-         child.middle4 =
-            1.5 * entry.middle4 - 0.5 * entry.farEnd4 +
-            (((entry.index & (1 << 4)) >> 4) ^ (invdir4 < 0)) *
-                (entry.farEnd4 - entry.middle4);
-        child.farEnd4 =
-            child.middle4 + (entry.farEnd4 - entry.middle4) / 2;
-         child.middle5 =
-            1.5 * entry.middle5 - 0.5 * entry.farEnd5 +
-            (((entry.index & (1 << 5)) >> 5) ^ (invdir5 < 0)) *
-                (entry.farEnd5 - entry.middle5);
-        child.farEnd5 =
-            child.middle5 + (entry.farEnd5 - entry.middle5) / 2;
-         child.middle6 =
-            1.5 * entry.middle6 - 0.5 * entry.farEnd6 +
-            (((entry.index & (1 << 6)) >> 6) ^ (invdir6 < 0)) *
-                (entry.farEnd6 - entry.middle6);
-        child.farEnd6 =
-            child.middle6 + (entry.farEnd6 - entry.middle6) / 2;
-         child.middle7 =
-            1.5 * entry.middle7 - 0.5 * entry.farEnd7 +
-            (((entry.index & (1 << 7)) >> 7) ^ (invdir7 < 0)) *
-                (entry.farEnd7 - entry.middle7);
-        child.farEnd7 =
-            child.middle7 + (entry.farEnd7 - entry.middle7) / 2;
-         child.middle8 =
-            1.5 * entry.middle8 - 0.5 * entry.farEnd8 +
-            (((entry.index & (1 << 8)) >> 8) ^ (invdir8 < 0)) *
-                (entry.farEnd8 - entry.middle8);
-        child.farEnd8 =
-            child.middle8 + (entry.farEnd8 - entry.middle8) / 2;
-         child.middle9 =
-            1.5 * entry.middle9 - 0.5 * entry.farEnd9 +
-            (((entry.index & (1 << 9)) >> 9) ^ (invdir9 < 0)) *
-                (entry.farEnd9 - entry.middle9);
-        child.farEnd9 =
-            child.middle9 + (entry.farEnd9 - entry.middle9) / 2;
-         child.middle10 =
-            1.5 * entry.middle10 - 0.5 * entry.farEnd10 +
-            (((entry.index & (1 << 10)) >> 10) ^ (invdir10 < 0)) *
-                (entry.farEnd10 - entry.middle10);
-        child.farEnd10 =
-            child.middle10 + (entry.farEnd10 - entry.middle10) / 2;
-         child.middle11 =
-            1.5 * entry.middle11 - 0.5 * entry.farEnd11 +
-            (((entry.index & (1 << 11)) >> 11) ^ (invdir11 < 0)) *
-                (entry.farEnd11 - entry.middle11);
-        child.farEnd11 =
-            child.middle11 + (entry.farEnd11 - entry.middle11) / 2;
+        StackEntry12 child;
+         if ((1 << 0) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 0);
+        }
+         if ((1 << 1) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 1);
+        }
+         if ((1 << 2) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 2);
+        }
+         if ((1 << 3) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 3);
+        }
+         if ((1 << 4) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 4);
+        }
+         if ((1 << 5) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 5);
+        }
+         if ((1 << 6) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 6);
+        }
+         if ((1 << 7) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 7);
+        }
+         if ((1 << 8) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 8);
+        }
+         if ((1 << 9) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 9);
+        }
+         if ((1 << 10) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 10);
+        }
+         if ((1 << 11) & diffIndex) {
+          makeChild12(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << 11);
+        }
         
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntry12 child;
+      makeChild12(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -6152,7 +5407,7 @@ bool rayBBox12( float pos0, float invdir0,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
    float t00 = (min0 - pos0) * invdir0;
@@ -6221,6 +5476,8 @@ bool traverseBVH12(__global uint *bvh,  float pos0,
                         float dir10, float invdir10,  float pos11,
                         float dir11, float invdir11, 
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[12];
    invdirArr[0] = invdir0;
    invdirArr[1] = invdir1;
@@ -6236,28 +5493,10 @@ bool traverseBVH12(__global uint *bvh,  float pos0,
    invdirArr[11] = invdir11;
   
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-     printf("invdir0: %f\n", invdir0);
-     printf("invdir1: %f\n", invdir1);
-     printf("invdir2: %f\n", invdir2);
-     printf("invdir3: %f\n", invdir3);
-     printf("invdir4: %f\n", invdir4);
-     printf("invdir5: %f\n", invdir5);
-     printf("invdir6: %f\n", invdir6);
-     printf("invdir7: %f\n", invdir7);
-     printf("invdir8: %f\n", invdir8);
-     printf("invdir9: %f\n", invdir9);
-     printf("invdir10: %f\n", invdir10);
-     printf("invdir11: %f\n", invdir11);
-    
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVH12: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
      float min0 = *floatBVH++;
@@ -6287,14 +5526,10 @@ bool traverseBVH12(__global uint *bvh,  float pos0,
     
     if (!rayBBox12(
              pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  pos6, invdir6, min6, max6,  pos7, invdir7, min7, max7,  pos8, invdir8, min8, max8,  pos9, invdir9, min9, max9,  pos10, invdir10, min10, max10,  pos11, invdir11, min11, max11,  0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctree12\n");
       if (traverseOctree12(currBvh + *currBvh,  pos0,
                                 dir0, invdir0,  pos1,
                                 dir1, invdir1,  pos2,
@@ -6328,8 +5563,6 @@ bool traverseBVH12(__global uint *bvh,  float pos0,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVH12\n\n\n\n\n");
   return false;
 }
 
@@ -6337,14 +5570,16 @@ __kernel void renderStd12(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
    float pos0 = pos[0];
   float dir0 = forward[0] + xoff * right[0] + yoff * up[0];
    float pos1 = pos[1];
@@ -6384,7 +5619,7 @@ __kernel void renderStd12(__global uint *bvh, __global float *pos,
    norm += dir10 * dir10;
    norm += dir11 * dir11;
   
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);

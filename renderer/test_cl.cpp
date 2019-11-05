@@ -2,18 +2,19 @@
 #include <load_cl.hpp>
 #include <lodepng/lodepng.h>
 #include <random>
+#include <time.h>
 
-cl_uint *generateNode(cl_uint *octree, std::size_t numDims, std::mt19937 &mtrand,
-                     cl_float sidelength) {
+cl_uint *generateNode(cl_uint *octree, std::size_t numDims,
+                      std::mt19937 &mtrand, cl_float sidelength) {
   cl_uint isLeaf;
   std::uniform_real_distribution<> distroF(0, 1);
   if (sidelength <= 1) {
     isLeaf = 1;
   } else {
-    isLeaf = 0; // distroF(mtrand) < 0.08;
+    isLeaf = distroF(mtrand) < 0.08;
   }
-  std::uniform_int_distribution<cl_uint> distroI(0, 0xFFFFFF);
-  cl_uint color = (distroI(mtrand) << 8) | 0xF0;
+  std::uniform_int_distribution<cl_uint> distroI(0, 0xFFFFFFFF);
+  cl_uint color = distroF(mtrand) < 0.6 ? 0 : distroI(mtrand) | 0xFA;
   *octree++ = isLeaf;
   if (isLeaf) {
     *octree++ = color;
@@ -32,7 +33,7 @@ cl_uint *generateNode(cl_uint *octree, std::size_t numDims, std::mt19937 &mtrand
 
 int main() {
   ClStuff clStuff = getClStuff();
-  const std::size_t numDims = 3, width = 256, height = 256;
+  const std::size_t numDims = 3, width = 50, height = 50;
   cl_uint bvh[1048576];
   cl_float *currBvhF = reinterpret_cast<cl_float *>(bvh);
   for (std::size_t i = 0; i < numDims; i++) {
@@ -53,7 +54,7 @@ int main() {
   RenderKernel kernel =
       compileRenderKernel(clStuff, numDims, 1048576, width, height);
   kernel.writeBvh(clStuff, bvh, 1048576);
-  cl_float pos[] = {7.5, 7.5, -4};
+  cl_float pos[] = {8, 8, -4};
   cl_float forward[] = {0, 0, 1};
   cl_float right[] = {1, 0, 0};
   cl_float up[] = {0, 1, 0};
@@ -62,7 +63,21 @@ int main() {
   kernel.writeRight(clStuff, right);
   kernel.writeUp(clStuff, up);
   try {
-    kernel.run(clStuff).wait();
+    for (std::size_t col = 0; col < width; col++) {
+      for (std::size_t row = 0; row < height; row++) {
+        std::cout << row << " " << col << std::endl;
+        cl_uint arr[] = {cl_uint(row), cl_uint(col), cl_uint(height),
+                         cl_uint(width)};
+        clStuff.queue.enqueueWriteBuffer(kernel.img, true, 0, sizeof(arr), arr);
+        cl::Event event = kernel.run(clStuff, 1, 1);
+        struct timespec nano = {0, 10000000};
+        nanosleep(&nano, nullptr);
+        if (event.getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>() != CL_COMPLETE) {
+          std::cout << "quack" << std::endl;
+          return 1;
+        }
+      }
+    }
   } catch (const cl::Error &err) {
     throw std::runtime_error(getClErrorString(err));
   }

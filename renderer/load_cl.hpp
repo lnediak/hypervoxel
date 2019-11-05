@@ -190,7 +190,13 @@ struct RenderKernel {
   cl::Buffer img, dist;
   cl::Kernel kernel;
 
-  cl::Event run(const ClStuff &clStuff) {
+  cl::Event run(const ClStuff &clStuff, std::size_t tmpWidth = -1,
+                std::size_t tmpHeight = -1) {
+    std::size_t neg1 = -1;
+    if ((tmpWidth == neg1) || (tmpHeight == neg1)) {
+      tmpWidth = width;
+      tmpHeight = height;
+    }
     try {
       kernel.setArg(0, bvh);
       kernel.setArg(1, pos);
@@ -201,7 +207,7 @@ struct RenderKernel {
       kernel.setArg(6, dist);
       cl::Event toreturn;
       clStuff.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
-                                         cl::NDRange(width, height),
+                                         cl::NDRange(tmpWidth, tmpHeight),
                                          cl::NullRange, nullptr, &toreturn);
       return toreturn;
     } catch (const cl::Error &err) {
@@ -209,7 +215,8 @@ struct RenderKernel {
     }
   }
 
-  void writeBvh(const ClStuff &clStuff, cl_uint *bvhPtr, std::size_t newBvhLen) {
+  void writeBvh(const ClStuff &clStuff, cl_uint *bvhPtr,
+                std::size_t newBvhLen) {
     try {
       if (newBvhLen > bvhLen) {
         bvh = cl::Buffer(clStuff.context, CL_MEM_READ_ONLY,

@@ -8,7 +8,7 @@ uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
 }
 
 uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0;
+  float falpha = (front & 0xFF) / 255.0f;
   return mergeColorChannel(back, front, 24, falpha) |
          mergeColorChannel(back, front, 16, falpha) |
          mergeColorChannel(back, front, 8, falpha) |
@@ -16,11 +16,6 @@ uint mergeColors(uint back, uint front) {
 }
 
 #endif // NON_REP_
-
-#define DEBUG_DEF                                                              \
-  bool debug =                                                                 \
-      (get_global_id(0) == 0 || get_global_id(0) == get_global_size(0) - 1) && \
-      (get_global_id(1) == 0 || get_global_id(1) == get_global_size(0) - 1)
 
 /*
 BVH format:
@@ -79,6 +74,30 @@ Each value in children in equal to childPtr - children, where childPtr is a
 pointer to the corresponding node.
 
 */
+typedef struct StackEntryNUMDIMS {
+
+  bool indexed;
+  __global uint *node;
+  size_t index;
+  REPEAT IND NUMDIMS float middleIND;
+  float farEndIND;
+  END;
+} StackEntryNUMDIMS;
+
+void makeChildNUMDIMS(const StackEntryNUMDIMS *parent, size_t index,
+                      StackEntryNUMDIMS *child) {
+  child->indexed = false;
+  child->node = parent->node + 1 + parent->node[index + 1];
+  REPEAT IND NUMDIMS child->middleIND =
+      1.5f * parent->middleIND - 0.5f * parent->farEndIND +
+      (((index & (1 << IND)) >> IND) ^
+       (parent->farEndIND < parent->middleIND)) *
+          (parent->farEndIND - parent->middleIND);
+  child->farEndIND =
+      child->middleIND + (parent->farEndIND - parent->middleIND) / 2;
+  END;
+}
+
 bool traverseOctreeNUMDIMS(__global uint *octree,
                            REPEAT IND NUMDIMS float posIND, float dirIND,
                            float invdirIND, END;
@@ -89,7 +108,7 @@ bool traverseOctreeNUMDIMS(__global uint *octree,
   float sidelength = *header++;
   octree = (__global uint *)header;
 
-  float tminMax = 1e-8;
+  float tminMax = 1e-4f;
   float tmaxMin = FLT_MAX;
   REPEAT IND NUMDIMS float t0IND = (originIND - posIND) * invdirIND;
   float t1IND = (originIND + sidelength - posIND) * invdirIND;
@@ -100,110 +119,69 @@ bool traverseOctreeNUMDIMS(__global uint *octree,
     return false;
   }
 
-  float currDist = tminMax + 1e-8;
+  float currDist = tminMax + 1e-4f;
   REPEAT IND NUMDIMS float currPosIND = posIND + currDist * dirIND;
   END;
 
-  struct StackEntry {
-
-    bool processed;
-    __global uint *node;
-    size_t index;
-    REPEAT IND NUMDIMS float middleIND;
-    float farEndIND;
-    END;
-  } stack[64];
+  StackEntryNUMDIMS stack[12];
   size_t stackInd = 0;
-  struct StackEntry baseEntry;
-  baseEntry.processed = false;
+  StackEntryNUMDIMS baseEntry;
+  baseEntry.indexed = false;
   baseEntry.node = octree;
   REPEAT IND NUMDIMS baseEntry.middleIND = originIND + sidelength / 2;
   baseEntry.farEndIND = originIND + (invdirIND > 0) * sidelength;
   END;
   stack[stackInd++] = baseEntry;
-  DEBUG_DEF;
   while (stackInd) {
-    if (debug)
-      printf("currDist: %f\n", currDist);
-    struct StackEntry entry = stack[--stackInd];
-    __global uint *node = entry.node;
-    if (debug) {
-      printf("Entry info: REPEAT IND NUMDIMS entry.middleIND: %f, "
-             "entry.farEndIND: %f, currPosIND: %f\n END;",
-             REPEAT IND NUMDIMS entry.middleIND, entry.farEndIND, currPosIND,
-             END;
-             0);
-    }
-    if (entry.processed) {
-      float minStep = FLT_MAX;
-      float val1, val2;
-      REPEAT IND NUMDIMS val1 = (entry.middleIND - currPosIND) * invdirIND;
-      val2 = (entry.farEndIND - currPosIND) * invdirIND;
-      if (val1 > 1e-4) {
-        minStep = min(minStep, val1);
-      } else {
-        if (val2 > 1e-4) {
-          minStep = min(minStep, val2);
-        } else {
-          continue;
-        }
+    StackEntryNUMDIMS entry = stack[--stackInd];
+    if (*entry.node) {
+      // this is a leaf node
+      *img = mergeColors(*(entry.node + 1), *img);
+      if ((*img & 0xFF) == 0xFF) {
+        *dist = currDist;
+        return true;
       }
+      float minStep = FLT_MAX;
+      REPEAT IND NUMDIMS minStep =
+          min(minStep, (entry.farEndIND - currPosIND) * invdirIND);
       END;
-      if (debug)
-        printf("Stepping from %f by %f, sidelength: %f\n", currDist, minStep,
-               fabs(entry.farEnd0 - entry.middle0) * 2);
-      currDist += minStep + 1e-4;
-      REPEAT IND NUMDIMS currPosIND = posIND + currDist * dirIND;
-      if (debug)
-        printf("currPosIND: %f\n", currPosIND);
-      END;
-      if (REPEAT IND NUMDIMS(entry.farEndIND - currPosIND) * invdirIND < 0 ||
-              END;
-          false) {
-        if (debug)
-          printf("Exiting entry\n");
+      if (minStep < 0) {
         continue;
       }
-      entry.processed = false;
-      stack[stackInd++] = entry;
+      currDist += minStep + 1e-4f;
+      REPEAT IND NUMDIMS currPosIND = posIND + currDist * dirIND;
+      END;
     } else {
-      if (*node++) {
-        if (debug)
-          printf("Reached leaf %i, sidelength: %f, currDist: %f\n", *(node - 1),
-                 fabs(entry.farEnd0 - entry.middle0) * 2, currDist);
-        // this is a leaf node
-        *img = mergeColors(*node, *img);
-        if ((*img & 0xFF) == 0xFF) {
-          if (debug)
-            printf("Exited function.\n");
-          *dist = currDist;
-          return true;
+      size_t newIndex =
+          REPEAT IND NUMDIMS((currPosIND >= entry.middleIND) << IND) | END;
+      0;
+      if (entry.indexed) {
+        size_t diffIndex = newIndex ^ entry.index;
+        entry.index = newIndex;
+        size_t tmpIndex = newIndex;
+        if (REPEAT IND NUMDIMS((entry.farEndIND - currPosIND) * invdirIND >
+                               0) &&
+                END;
+            true) {
+          stack[stackInd++] = entry;
         }
-      } else {
-        float halfSidelength = sidelength / (2 << stackInd);
-        entry.index =
-            REPEAT IND NUMDIMS((currPosIND >= entry.middleIND) << IND) | END;
-        0;
-        if (debug)
-          printf("Going down. currDist: %f\n", currDist);
-        entry.processed = true;
-        stack[stackInd++] = entry;
-        struct StackEntry child;
-        child.processed = false;
-        child.node = node + node[entry.index];
-        REPEAT IND NUMDIMS child.middleIND =
-            1.5 * entry.middleIND - 0.5 * entry.farEndIND +
-            (((entry.index & (1 << IND)) >> IND) ^ (invdirIND < 0)) *
-                (entry.farEndIND - entry.middleIND);
-        child.farEndIND =
-            child.middleIND + (entry.farEndIND - entry.middleIND) / 2;
+        StackEntryNUMDIMS child;
+        REPEAT IND NUMDIMS if ((1 << IND) & diffIndex) {
+          makeChildNUMDIMS(&entry, tmpIndex, &child);
+          stack[stackInd++] = child;
+          tmpIndex ^= (1 << IND);
+        }
         END;
-        stack[stackInd++] = child;
+        continue;
       }
+      entry.index = newIndex;
+      entry.indexed = true;
+      stack[stackInd++] = entry;
+      StackEntryNUMDIMS child;
+      makeChildNUMDIMS(&entry, entry.index, &child);
+      stack[stackInd++] = child;
     }
   }
-  if (debug)
-    printf("Exited function.\n");
   return false;
 }
 
@@ -212,7 +190,7 @@ bool rayBBoxNUMDIMS(REPEAT IND NUMDIMS float posIND, float invdirIND,
                     int unused) {
   (void)unused;
   // maximum of the lower bounds
-  float tminMax = 1e-8;
+  float tminMax = 1e-8f;
   // minimum of the upper bounds
   float tmaxMin = FLT_MAX;
   REPEAT IND NUMDIMS float t0IND = (minIND - posIND) * invdirIND;
@@ -226,21 +204,16 @@ bool rayBBoxNUMDIMS(REPEAT IND NUMDIMS float posIND, float invdirIND,
 bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
                         float dirIND, float invdirIND, END;
                         __global uint * img, __global float *dist) {
+  *img = 0;
+  *dist = -1;
   float invdirArr[NUMDIMS];
   REPEAT IND NUMDIMS invdirArr[IND] = invdirIND;
   END;
 
-  __global uint *stack[256];
+  __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
-  DEBUG_DEF;
-  if (debug) {
-    REPEAT IND NUMDIMS printf("invdirIND: %f\n", invdirIND);
-    END;
-  }
   while (stackInd) {
-    if (debug)
-      printf("traverseBVHNUMDIMS: %lu\n", stackInd);
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
     REPEAT IND NUMDIMS float minIND = *floatBVH++;
@@ -248,14 +221,10 @@ bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
     END;
     if (!rayBBoxNUMDIMS(
             REPEAT IND NUMDIMS posIND, invdirIND, minIND, maxIND, END; 0)) {
-      if (debug)
-        printf("quack: %lu\n", stackInd);
       continue;
     }
     currBvh = (__global uint *)floatBVH;
     if (*currBvh++) {
-      if (debug)
-        printf("Entering traverseOctreeNUMDIMS\n");
       if (traverseOctreeNUMDIMS(currBvh + *currBvh, REPEAT IND NUMDIMS posIND,
                                 dirIND, invdirIND, END;
                                 img, dist)) {
@@ -278,8 +247,6 @@ bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
     stack[stackInd++] = rbvh;
     stack[stackInd++] = lbvh;
   }
-  if (debug)
-    printf("Exiting traverseBVHNUMDIMS\n\n\n\n\n");
   return false;
 }
 
@@ -287,21 +254,23 @@ __kernel void renderStdNUMDIMS(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uint *img,
                                __global float *dist) {
-  *img = 0;
-  *dist = -1;
-  size_t row = get_global_id(0);
+  /*size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
-  size_t width = get_global_size(1);
-  float xoff = 2 * (col + 0.0) / width - 1;
-  float yoff = 2 * (row + 0.0) / height - 1;
+  size_t width = get_global_size(1);*/
+  size_t row = *img;
+  size_t col = *(img + 1);
+  size_t height = *(img + 2);
+  size_t width = *(img + 3);
+  float xoff = 2 * (col + 0.0f) / width - 1;
+  float yoff = 2 * (row + 0.0f) / height - 1;
   REPEAT IND NUMDIMS float posIND = pos[IND];
   float dirIND = forward[IND] + xoff * right[IND] + yoff * up[IND];
   END;
   float norm = 0;
   REPEAT IND NUMDIMS norm += dirIND * dirIND;
   END;
-  if (norm < 1e-4) {
+  if (norm < 1e-4f) {
     return;
   }
   norm = sqrt(norm);
