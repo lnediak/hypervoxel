@@ -266,7 +266,7 @@ struct RenderKernel {
     }
   }
 
-  void readImg(const ClStuff &clStuff, cl_uint *imgPtr, cl_uint *distPtr) {
+  void readImg(const ClStuff &clStuff, cl_uint *imgPtr, cl_float *distPtr) {
     try {
       if (imgPtr) {
         clStuff.queue.enqueueReadBuffer(
@@ -294,7 +294,7 @@ inline RenderKernel compileRenderKernel(const ClStuff &clStuff,
 
     cl::Program prog(clStuff.context, src);
     try {
-      prog.build({clStuff.device}, "-cl-std=CL1.1");
+      prog.build({clStuff.device}, "");
     } catch (const cl::Error &err) {
       throw std::runtime_error(
           getClErrorString(err) + "\nBuild log: " +

@@ -33,7 +33,7 @@ cl_uint *generateNode(cl_uint *octree, std::size_t numDims,
 
 int main() {
   ClStuff clStuff = getClStuff();
-  const std::size_t numDims = 3, width = 50, height = 50;
+  const std::size_t numDims = 3, width = 1020, height = 1020;
   cl_uint bvh[1048576];
   cl_float *currBvhF = reinterpret_cast<cl_float *>(bvh);
   for (std::size_t i = 0; i < numDims; i++) {
@@ -63,21 +63,54 @@ int main() {
   kernel.writeRight(clStuff, right);
   kernel.writeUp(clStuff, up);
   try {
+    /*
     for (std::size_t col = 0; col < width; col++) {
       for (std::size_t row = 0; row < height; row++) {
+        //size_t row = 25;
+        //size_t col = 0;
         std::cout << row << " " << col << std::endl;
         cl_uint arr[] = {cl_uint(row), cl_uint(col), cl_uint(height),
                          cl_uint(width)};
         clStuff.queue.enqueueWriteBuffer(kernel.img, true, 0, sizeof(arr), arr);
         cl::Event event = kernel.run(clStuff, 1, 1);
+        *
         struct timespec nano = {0, 10000000};
         nanosleep(&nano, nullptr);
         if (event.getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>() != CL_COMPLETE) {
           std::cout << "quack" << std::endl;
           return 1;
         }
+        *
+        event.wait();
       }
     }
+    */
+    /*float dist[width * height];
+    float *distp = dist;
+    kernel.readImg(clStuff, nullptr, distp);
+    for (std::size_t i = 0; i < 99; i++) {
+      std::cout << "currDist: " << *distp++ << std::endl;
+      std::cout << "currPos"
+                << ": " << *distp << ", " << *(distp + 4) << ", "
+                << *(distp + 8) << std::endl;
+      distp++;
+      std::cout << "invdir"
+                << ": " << *distp << ", " << *(distp + 4) << ", "
+                << *(distp + 8) << std::endl;
+      distp++;
+      std::cout << "middle"
+                << ": " << *distp << ", " << *(distp + 4) << ", "
+                << *(distp + 8) << std::endl;
+      distp++;
+      std::cout << "farEnd"
+                << ": " << *distp << ", " << *(distp + 4) << ", "
+                << *(distp + 8) << std::endl;
+      distp += 9;
+      std::cout << "IsLeaf: " << *distp++ << std::endl;
+      std::cout << "StackInd: " << *distp++ << std::endl;
+      std::cout << std::endl << std::endl;
+    } */
+    kernel.run(clStuff, width, height).wait();
   } catch (const cl::Error &err) {
     throw std::runtime_error(getClErrorString(err));
   }
