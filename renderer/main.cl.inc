@@ -3,18 +3,27 @@ R"OPENCLPP(
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -120,7 +129,7 @@ bool traverseOctree3(__global uint *octree,
                            float invdir0,  float pos1, float dir1,
                            float invdir1,  float pos2, float dir2,
                            float invdir2, 
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
    float origin0 = *header++;
    float origin1 = *header++;
@@ -214,8 +223,8 @@ bool traverseOctree3(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -287,12 +296,9 @@ bool traverseOctree3(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 >
-                             0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 >
-                             0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 >
-                             0) &&
+      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
+              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
+              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
               
           true) {
         stack[stackInd++] = entry;
@@ -335,8 +341,8 @@ bool traverseBVH3(__global uint *bvh,  float pos0,
                         float dir0, float invdir0,  float pos1,
                         float dir1, float invdir1,  float pos2,
                         float dir2, float invdir2, 
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[3];
    invdirArr[0] = invdir0;
@@ -392,7 +398,7 @@ bool traverseBVH3(__global uint *bvh,  float pos0,
 
 __kernel void renderStd3(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -428,7 +434,7 @@ __kernel void renderStd3(__global uint *bvh, __global float *pos,
   float invdir2 = 1 / dir2;
   
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVH3(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2, 
                      img, dist);
@@ -437,18 +443,27 @@ __kernel void renderStd3(__global uint *bvh, __global float *pos,
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -563,7 +578,7 @@ bool traverseOctree4(__global uint *octree,
                            float invdir1,  float pos2, float dir2,
                            float invdir2,  float pos3, float dir3,
                            float invdir3, 
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
    float origin0 = *header++;
    float origin1 = *header++;
@@ -672,8 +687,8 @@ bool traverseOctree4(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -759,14 +774,10 @@ bool traverseOctree4(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 >
-                             0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 >
-                             0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 >
-                             0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 >
-                             0) &&
+      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
+              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
+              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
+              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
               
           true) {
         stack[stackInd++] = entry;
@@ -815,8 +826,8 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
                         float dir1, float invdir1,  float pos2,
                         float dir2, float invdir2,  float pos3,
                         float dir3, float invdir3, 
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[4];
    invdirArr[0] = invdir0;
@@ -876,7 +887,7 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
 
 __kernel void renderStd4(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -917,7 +928,7 @@ __kernel void renderStd4(__global uint *bvh, __global float *pos,
   float invdir3 = 1 / dir3;
   
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVH4(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3, 
                      img, dist);
@@ -926,18 +937,27 @@ __kernel void renderStd4(__global uint *bvh, __global float *pos,
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -1061,7 +1081,7 @@ bool traverseOctree5(__global uint *octree,
                            float invdir2,  float pos3, float dir3,
                            float invdir3,  float pos4, float dir4,
                            float invdir4, 
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
    float origin0 = *header++;
    float origin1 = *header++;
@@ -1185,8 +1205,8 @@ bool traverseOctree5(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -1286,16 +1306,11 @@ bool traverseOctree5(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 >
-                             0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 >
-                             0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 >
-                             0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 >
-                             0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 >
-                             0) &&
+      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
+              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
+              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
+              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
+              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
               
           true) {
         stack[stackInd++] = entry;
@@ -1350,8 +1365,8 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
                         float dir2, float invdir2,  float pos3,
                         float dir3, float invdir3,  float pos4,
                         float dir4, float invdir4, 
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[5];
    invdirArr[0] = invdir0;
@@ -1415,7 +1430,7 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
 
 __kernel void renderStd5(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -1461,7 +1476,7 @@ __kernel void renderStd5(__global uint *bvh, __global float *pos,
   float invdir4 = 1 / dir4;
   
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVH5(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4, 
                      img, dist);
@@ -1470,18 +1485,27 @@ __kernel void renderStd5(__global uint *bvh, __global float *pos,
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -1614,7 +1638,7 @@ bool traverseOctree6(__global uint *octree,
                            float invdir3,  float pos4, float dir4,
                            float invdir4,  float pos5, float dir5,
                            float invdir5, 
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
    float origin0 = *header++;
    float origin1 = *header++;
@@ -1753,8 +1777,8 @@ bool traverseOctree6(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -1868,18 +1892,12 @@ bool traverseOctree6(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 >
-                             0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 >
-                             0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 >
-                             0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 >
-                             0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 >
-                             0) &&
-              ((entry.farEnd5 - currPos5) * invdir5 >
-                             0) &&
+      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
+              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
+              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
+              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
+              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
+              ((entry.farEnd5 - currPos5) * invdir5 > 0) &&
               
           true) {
         stack[stackInd++] = entry;
@@ -1940,8 +1958,8 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
                         float dir3, float invdir3,  float pos4,
                         float dir4, float invdir4,  float pos5,
                         float dir5, float invdir5, 
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[6];
    invdirArr[0] = invdir0;
@@ -2009,7 +2027,7 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
 
 __kernel void renderStd6(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -2060,7 +2078,7 @@ __kernel void renderStd6(__global uint *bvh, __global float *pos,
   float invdir5 = 1 / dir5;
   
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVH6(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5, 
                      img, dist);
@@ -2069,18 +2087,27 @@ __kernel void renderStd6(__global uint *bvh, __global float *pos,
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -2222,7 +2249,7 @@ bool traverseOctree7(__global uint *octree,
                            float invdir4,  float pos5, float dir5,
                            float invdir5,  float pos6, float dir6,
                            float invdir6, 
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
    float origin0 = *header++;
    float origin1 = *header++;
@@ -2376,8 +2403,8 @@ bool traverseOctree7(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -2505,20 +2532,13 @@ bool traverseOctree7(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 >
-                             0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 >
-                             0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 >
-                             0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 >
-                             0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 >
-                             0) &&
-              ((entry.farEnd5 - currPos5) * invdir5 >
-                             0) &&
-              ((entry.farEnd6 - currPos6) * invdir6 >
-                             0) &&
+      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
+              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
+              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
+              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
+              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
+              ((entry.farEnd5 - currPos5) * invdir5 > 0) &&
+              ((entry.farEnd6 - currPos6) * invdir6 > 0) &&
               
           true) {
         stack[stackInd++] = entry;
@@ -2585,8 +2605,8 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
                         float dir4, float invdir4,  float pos5,
                         float dir5, float invdir5,  float pos6,
                         float dir6, float invdir6, 
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[7];
    invdirArr[0] = invdir0;
@@ -2658,7 +2678,7 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
 
 __kernel void renderStd7(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -2714,7 +2734,7 @@ __kernel void renderStd7(__global uint *bvh, __global float *pos,
   float invdir6 = 1 / dir6;
   
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVH7(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5,  pos6, dir6, invdir6, 
                      img, dist);
@@ -2723,18 +2743,27 @@ __kernel void renderStd7(__global uint *bvh, __global float *pos,
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -2885,7 +2914,7 @@ bool traverseOctree8(__global uint *octree,
                            float invdir5,  float pos6, float dir6,
                            float invdir6,  float pos7, float dir7,
                            float invdir7, 
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
    float origin0 = *header++;
    float origin1 = *header++;
@@ -3054,8 +3083,8 @@ bool traverseOctree8(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -3197,22 +3226,14 @@ bool traverseOctree8(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 >
-                             0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 >
-                             0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 >
-                             0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 >
-                             0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 >
-                             0) &&
-              ((entry.farEnd5 - currPos5) * invdir5 >
-                             0) &&
-              ((entry.farEnd6 - currPos6) * invdir6 >
-                             0) &&
-              ((entry.farEnd7 - currPos7) * invdir7 >
-                             0) &&
+      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
+              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
+              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
+              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
+              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
+              ((entry.farEnd5 - currPos5) * invdir5 > 0) &&
+              ((entry.farEnd6 - currPos6) * invdir6 > 0) &&
+              ((entry.farEnd7 - currPos7) * invdir7 > 0) &&
               
           true) {
         stack[stackInd++] = entry;
@@ -3285,8 +3306,8 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
                         float dir5, float invdir5,  float pos6,
                         float dir6, float invdir6,  float pos7,
                         float dir7, float invdir7, 
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[8];
    invdirArr[0] = invdir0;
@@ -3362,7 +3383,7 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
 
 __kernel void renderStd8(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -3423,7 +3444,7 @@ __kernel void renderStd8(__global uint *bvh, __global float *pos,
   float invdir7 = 1 / dir7;
   
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVH8(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5,  pos6, dir6, invdir6,  pos7, dir7, invdir7, 
                      img, dist);
@@ -3432,18 +3453,27 @@ __kernel void renderStd8(__global uint *bvh, __global float *pos,
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -3603,7 +3633,7 @@ bool traverseOctree9(__global uint *octree,
                            float invdir6,  float pos7, float dir7,
                            float invdir7,  float pos8, float dir8,
                            float invdir8, 
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
    float origin0 = *header++;
    float origin1 = *header++;
@@ -3787,8 +3817,8 @@ bool traverseOctree9(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -3944,24 +3974,15 @@ bool traverseOctree9(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 >
-                             0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 >
-                             0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 >
-                             0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 >
-                             0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 >
-                             0) &&
-              ((entry.farEnd5 - currPos5) * invdir5 >
-                             0) &&
-              ((entry.farEnd6 - currPos6) * invdir6 >
-                             0) &&
-              ((entry.farEnd7 - currPos7) * invdir7 >
-                             0) &&
-              ((entry.farEnd8 - currPos8) * invdir8 >
-                             0) &&
+      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
+              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
+              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
+              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
+              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
+              ((entry.farEnd5 - currPos5) * invdir5 > 0) &&
+              ((entry.farEnd6 - currPos6) * invdir6 > 0) &&
+              ((entry.farEnd7 - currPos7) * invdir7 > 0) &&
+              ((entry.farEnd8 - currPos8) * invdir8 > 0) &&
               
           true) {
         stack[stackInd++] = entry;
@@ -4040,8 +4061,8 @@ bool traverseBVH9(__global uint *bvh,  float pos0,
                         float dir6, float invdir6,  float pos7,
                         float dir7, float invdir7,  float pos8,
                         float dir8, float invdir8, 
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[9];
    invdirArr[0] = invdir0;
@@ -4121,7 +4142,7 @@ bool traverseBVH9(__global uint *bvh,  float pos0,
 
 __kernel void renderStd9(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -4187,7 +4208,7 @@ __kernel void renderStd9(__global uint *bvh, __global float *pos,
   float invdir8 = 1 / dir8;
   
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVH9(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5,  pos6, dir6, invdir6,  pos7, dir7, invdir7,  pos8, dir8, invdir8, 
                      img, dist);
@@ -4196,18 +4217,27 @@ __kernel void renderStd9(__global uint *bvh, __global float *pos,
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -4376,7 +4406,7 @@ bool traverseOctree10(__global uint *octree,
                            float invdir7,  float pos8, float dir8,
                            float invdir8,  float pos9, float dir9,
                            float invdir9, 
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
    float origin0 = *header++;
    float origin1 = *header++;
@@ -4575,8 +4605,8 @@ bool traverseOctree10(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -4746,26 +4776,16 @@ bool traverseOctree10(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 >
-                             0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 >
-                             0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 >
-                             0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 >
-                             0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 >
-                             0) &&
-              ((entry.farEnd5 - currPos5) * invdir5 >
-                             0) &&
-              ((entry.farEnd6 - currPos6) * invdir6 >
-                             0) &&
-              ((entry.farEnd7 - currPos7) * invdir7 >
-                             0) &&
-              ((entry.farEnd8 - currPos8) * invdir8 >
-                             0) &&
-              ((entry.farEnd9 - currPos9) * invdir9 >
-                             0) &&
+      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
+              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
+              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
+              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
+              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
+              ((entry.farEnd5 - currPos5) * invdir5 > 0) &&
+              ((entry.farEnd6 - currPos6) * invdir6 > 0) &&
+              ((entry.farEnd7 - currPos7) * invdir7 > 0) &&
+              ((entry.farEnd8 - currPos8) * invdir8 > 0) &&
+              ((entry.farEnd9 - currPos9) * invdir9 > 0) &&
               
           true) {
         stack[stackInd++] = entry;
@@ -4850,8 +4870,8 @@ bool traverseBVH10(__global uint *bvh,  float pos0,
                         float dir7, float invdir7,  float pos8,
                         float dir8, float invdir8,  float pos9,
                         float dir9, float invdir9, 
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[10];
    invdirArr[0] = invdir0;
@@ -4935,7 +4955,7 @@ bool traverseBVH10(__global uint *bvh,  float pos0,
 
 __kernel void renderStd10(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -5006,7 +5026,7 @@ __kernel void renderStd10(__global uint *bvh, __global float *pos,
   float invdir9 = 1 / dir9;
   
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVH10(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5,  pos6, dir6, invdir6,  pos7, dir7, invdir7,  pos8, dir8, invdir8,  pos9, dir9, invdir9, 
                      img, dist);
@@ -5015,18 +5035,27 @@ __kernel void renderStd10(__global uint *bvh, __global float *pos,
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -5204,7 +5233,7 @@ bool traverseOctree11(__global uint *octree,
                            float invdir8,  float pos9, float dir9,
                            float invdir9,  float pos10, float dir10,
                            float invdir10, 
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
    float origin0 = *header++;
    float origin1 = *header++;
@@ -5418,8 +5447,8 @@ bool traverseOctree11(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -5603,28 +5632,17 @@ bool traverseOctree11(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 >
-                             0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 >
-                             0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 >
-                             0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 >
-                             0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 >
-                             0) &&
-              ((entry.farEnd5 - currPos5) * invdir5 >
-                             0) &&
-              ((entry.farEnd6 - currPos6) * invdir6 >
-                             0) &&
-              ((entry.farEnd7 - currPos7) * invdir7 >
-                             0) &&
-              ((entry.farEnd8 - currPos8) * invdir8 >
-                             0) &&
-              ((entry.farEnd9 - currPos9) * invdir9 >
-                             0) &&
-              ((entry.farEnd10 - currPos10) * invdir10 >
-                             0) &&
+      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
+              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
+              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
+              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
+              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
+              ((entry.farEnd5 - currPos5) * invdir5 > 0) &&
+              ((entry.farEnd6 - currPos6) * invdir6 > 0) &&
+              ((entry.farEnd7 - currPos7) * invdir7 > 0) &&
+              ((entry.farEnd8 - currPos8) * invdir8 > 0) &&
+              ((entry.farEnd9 - currPos9) * invdir9 > 0) &&
+              ((entry.farEnd10 - currPos10) * invdir10 > 0) &&
               
           true) {
         stack[stackInd++] = entry;
@@ -5715,8 +5733,8 @@ bool traverseBVH11(__global uint *bvh,  float pos0,
                         float dir8, float invdir8,  float pos9,
                         float dir9, float invdir9,  float pos10,
                         float dir10, float invdir10, 
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[11];
    invdirArr[0] = invdir0;
@@ -5804,7 +5822,7 @@ bool traverseBVH11(__global uint *bvh,  float pos0,
 
 __kernel void renderStd11(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -5880,7 +5898,7 @@ __kernel void renderStd11(__global uint *bvh, __global float *pos,
   float invdir10 = 1 / dir10;
   
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVH11(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5,  pos6, dir6, invdir6,  pos7, dir7, invdir7,  pos8, dir8, invdir8,  pos9, dir9, invdir9,  pos10, dir10, invdir10, 
                      img, dist);
@@ -5889,18 +5907,27 @@ __kernel void renderStd11(__global uint *bvh, __global float *pos,
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -6087,7 +6114,7 @@ bool traverseOctree12(__global uint *octree,
                            float invdir9,  float pos10, float dir10,
                            float invdir10,  float pos11, float dir11,
                            float invdir11, 
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
    float origin0 = *header++;
    float origin1 = *header++;
@@ -6316,8 +6343,8 @@ bool traverseOctree12(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -6515,30 +6542,18 @@ bool traverseOctree12(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 >
-                             0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 >
-                             0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 >
-                             0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 >
-                             0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 >
-                             0) &&
-              ((entry.farEnd5 - currPos5) * invdir5 >
-                             0) &&
-              ((entry.farEnd6 - currPos6) * invdir6 >
-                             0) &&
-              ((entry.farEnd7 - currPos7) * invdir7 >
-                             0) &&
-              ((entry.farEnd8 - currPos8) * invdir8 >
-                             0) &&
-              ((entry.farEnd9 - currPos9) * invdir9 >
-                             0) &&
-              ((entry.farEnd10 - currPos10) * invdir10 >
-                             0) &&
-              ((entry.farEnd11 - currPos11) * invdir11 >
-                             0) &&
+      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
+              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
+              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
+              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
+              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
+              ((entry.farEnd5 - currPos5) * invdir5 > 0) &&
+              ((entry.farEnd6 - currPos6) * invdir6 > 0) &&
+              ((entry.farEnd7 - currPos7) * invdir7 > 0) &&
+              ((entry.farEnd8 - currPos8) * invdir8 > 0) &&
+              ((entry.farEnd9 - currPos9) * invdir9 > 0) &&
+              ((entry.farEnd10 - currPos10) * invdir10 > 0) &&
+              ((entry.farEnd11 - currPos11) * invdir11 > 0) &&
               
           true) {
         stack[stackInd++] = entry;
@@ -6635,8 +6650,8 @@ bool traverseBVH12(__global uint *bvh,  float pos0,
                         float dir9, float invdir9,  float pos10,
                         float dir10, float invdir10,  float pos11,
                         float dir11, float invdir11, 
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[12];
    invdirArr[0] = invdir0;
@@ -6728,7 +6743,7 @@ bool traverseBVH12(__global uint *bvh,  float pos0,
 
 __kernel void renderStd12(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -6809,7 +6824,7 @@ __kernel void renderStd12(__global uint *bvh, __global float *pos,
   float invdir11 = 1 / dir11;
   
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVH12(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5,  pos6, dir6, invdir6,  pos7, dir7, invdir7,  pos8, dir8, invdir8,  pos9, dir9, invdir9,  pos10, dir10, invdir10,  pos11, dir11, invdir11, 
                      img, dist);

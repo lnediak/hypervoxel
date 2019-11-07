@@ -14,7 +14,7 @@ cl_uint *generateNode(cl_uint *octree, std::size_t numDims,
     isLeaf = distroF(mtrand) < 0.08;
   }
   std::uniform_int_distribution<cl_uint> distroI(0, 0xFFFFFFFF);
-  cl_uint color = distroF(mtrand) < 0.6 ? 0 : distroI(mtrand) | 0xFA;
+  cl_uint color = distroF(mtrand) < 0.6 ? 0 : (distroI(mtrand) & ~0xFF) | 0xA0;
   *octree++ = isLeaf;
   if (isLeaf) {
     *octree++ = color;
@@ -114,15 +114,8 @@ int main() {
   } catch (const cl::Error &err) {
     throw std::runtime_error(getClErrorString(err));
   }
-  cl_uint img[width * height];
-  kernel.readImg(clStuff, img, nullptr);
   std::vector<unsigned char> imgVec(width * height * 4);
-  for (std::size_t i = 0; i < width * height; i++) {
-    imgVec[i * 4] = img[i] >> 24;
-    imgVec[i * 4 + 1] = (img[i] >> 16) & 0xFF;
-    imgVec[i * 4 + 2] = (img[i] >> 8) & 0xFF;
-    imgVec[i * 4 + 3] = img[i] & 0xFF;
-  }
+  kernel.readImg(clStuff, &imgVec[0], nullptr);
   unsigned error = lodepng::encode("out.png", imgVec, width, height);
   if (error) {
     throw std::runtime_error(lodepng_error_text(error));

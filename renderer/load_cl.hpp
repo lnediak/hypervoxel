@@ -266,11 +266,11 @@ struct RenderKernel {
     }
   }
 
-  void readImg(const ClStuff &clStuff, cl_uint *imgPtr, cl_float *distPtr) {
+  void readImg(const ClStuff &clStuff, cl_uchar *imgPtr, cl_float *distPtr) {
     try {
       if (imgPtr) {
         clStuff.queue.enqueueReadBuffer(
-            img, true, 0, sizeof(cl_uint) * width * height, imgPtr);
+            img, true, 0, sizeof(cl_uchar) * 4 * width * height, imgPtr);
       }
       if (distPtr) {
         clStuff.queue.enqueueReadBuffer(
@@ -312,7 +312,7 @@ inline RenderKernel compileRenderKernel(const ClStuff &clStuff,
             {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
             {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
             {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
-            {clStuff.context, CL_MEM_READ_WRITE, sizeof(cl_uint) * numPixels},
+            {clStuff.context, CL_MEM_READ_WRITE, sizeof(cl_uchar) * 4 * numPixels},
             {clStuff.context, CL_MEM_WRITE_ONLY, sizeof(cl_float) * numPixels},
             {prog, ss.str().c_str()}};
   } catch (const cl::Error &err) {

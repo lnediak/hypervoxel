@@ -1,18 +1,27 @@
 #ifndef NON_REP_
 #define NON_REP_
 
-uint mergeColorChannel(uint back, uint front, uint bitshift, float falpha) {
-  return ((uint)(((front >> bitshift) & 0xFF) * falpha +
-                 ((back >> bitshift) & 0xFF) * (1 - falpha)))
-         << bitshift;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
 }
 
-uint mergeColors(uint back, uint front) {
-  float falpha = (front & 0xFF) / 255.0f;
-  return mergeColorChannel(back, front, 24, falpha) |
-         mergeColorChannel(back, front, 16, falpha) |
-         mergeColorChannel(back, front, 8, falpha) |
-         max(front & 0xFF, back & 0xFF);
+void placeBehind(uint color, __global uchar *img) {
+  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
+    *img = (color >> 24) & 0xFF;
+    *(img + 1) = (color >> 16) & 0xFF;
+    *(img + 2) = (color >> 8) & 0xFF;
+    *(img + 3) = color & 0xFF;
+    return;
+  }
+  uchar frontAlpha = *(img + 3);
+  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
+  img++;
+  *img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -100,7 +109,7 @@ void makeChildNUMDIMS(const StackEntryNUMDIMS *parent, size_t index,
 bool traverseOctreeNUMDIMS(__global uint *octree,
                            REPEAT IND NUMDIMS float posIND, float dirIND,
                            float invdirIND, END;
-                           __global uint * img, __global float *dist) {
+                           __global uchar * img, __global float *dist) {
   __global float *header = (__global float *)octree;
   REPEAT IND NUMDIMS float originIND = *header++;
   END;
@@ -164,8 +173,8 @@ bool traverseOctreeNUMDIMS(__global uint *octree,
     */
     if (*entry.node) {
       // this is a leaf node
-      *img = mergeColors(*(entry.node + 1), *img);
-      if ((*img & 0xFF) == 0xFF) {
+      placeBehind(*(entry.node + 1), img);
+      if (*(img + 3) == 0xFF) {
         *dist = currDist;
         return true;
       }
@@ -209,8 +218,7 @@ bool traverseOctreeNUMDIMS(__global uint *octree,
       }
       entry.index = newIndex;
       entry.indexed = true;
-      if (REPEAT IND NUMDIMS((entry.farEndIND - currPosIND) * invdirIND >
-                             0) &&
+      if (REPEAT IND NUMDIMS((entry.farEndIND - currPosIND) * invdirIND > 0) &&
               END;
           true) {
         stack[stackInd++] = entry;
@@ -241,8 +249,8 @@ bool rayBBoxNUMDIMS(REPEAT IND NUMDIMS float posIND, float invdirIND,
 
 bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
                         float dirIND, float invdirIND, END;
-                        __global uint * img, __global float *dist) {
-  *img = 0;
+                        __global uchar * img, __global float *dist) {
+  *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[NUMDIMS];
   REPEAT IND NUMDIMS invdirArr[IND] = invdirIND;
@@ -290,7 +298,7 @@ bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
 
 __kernel void renderStdNUMDIMS(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
-                               __global float *up, __global uint *img,
+                               __global float *up, __global uchar *img,
                                __global float *dist) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
@@ -316,7 +324,7 @@ __kernel void renderStdNUMDIMS(__global uint *bvh, __global float *pos,
   float invdirIND = 1 / dirIND;
   END;
   size_t posIndex = row * width + col;
-  img += posIndex;
+  img += 4 * posIndex;
   dist += posIndex;
   traverseBVHNUMDIMS(bvh, REPEAT IND NUMDIMS posIND, dirIND, invdirIND, END;
                      img, dist);
