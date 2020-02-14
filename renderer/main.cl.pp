@@ -6,13 +6,6 @@ uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, 
 }
 
 void placeBehind(uint color, __global uchar *img) {
-  if ((*img == 0) && (*(img + 1) == 0) && (*(img + 2) == 0) && (*(img + 3) == 0)) {
-    *img = (color >> 24) & 0xFF;
-    *(img + 1) = (color >> 16) & 0xFF;
-    *(img + 2) = (color >> 8) & 0xFF;
-    *(img + 3) = color & 0xFF;
-    return;
-  }
   uchar frontAlpha = *(img + 3);
   uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
   *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
