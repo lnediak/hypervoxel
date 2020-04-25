@@ -7,12 +7,32 @@ HI0hi0 bob  eyey
 REPEATEND; END; 1
 .
 
+ble0 = dfdfVAL0;
+
+ble1 = dfdfVAL0;
+
+
+
 END; hello world END;
 hi0hi ye. hi1hi ye. 
 HI0hi0 HI0hi1 bob HI1hi0 HI1hi1 bob  eyey 
 
 REPEATEND; END; 2
 .
+
+ble00 = dfdfVAL0;
+ble00 = dfdfVAL1;
+
+ble01 = dfdfVAL0;
+ble01 = dfdfVAL1;
+
+ble10 = dfdfVAL0;
+ble10 = dfdfVAL1;
+
+ble11 = dfdfVAL0;
+ble11 = dfdfVAL1;
+
+
 
 END; hello world END;
 hi0hi ye. hi1hi ye. hi2hi ye. 
@@ -21,11 +41,38 @@ HI0hi0 HI0hi1 HI0hi2 bob HI1hi0 HI1hi1 HI1hi2 bob HI2hi0 HI2hi1 HI2hi2 bob  eyey
 REPEATEND; END; 3
 .
 
-END; hello world END;
-hi0hi ye. hi1hi ye. hi2hi ye. hi3hi ye. 
-HI0hi0 HI0hi1 HI0hi2 HI0hi3 bob HI1hi0 HI1hi1 HI1hi2 HI1hi3 bob HI2hi0 HI2hi1 HI2hi2 HI2hi3 bob HI3hi0 HI3hi1 HI3hi2 HI3hi3 bob  eyey 
+ble000 = dfdfVAL0;
+ble000 = dfdfVAL1;
+ble000 = dfdfVAL2;
 
-REPEATEND; END; 4
-.
+ble001 = dfdfVAL0;
+ble001 = dfdfVAL1;
+ble001 = dfdfVAL2;
+
+ble010 = dfdfVAL0;
+ble010 = dfdfVAL1;
+ble010 = dfdfVAL2;
+
+ble011 = dfdfVAL0;
+ble011 = dfdfVAL1;
+ble011 = dfdfVAL2;
+
+ble100 = dfdfVAL0;
+ble100 = dfdfVAL1;
+ble100 = dfdfVAL2;
+
+ble101 = dfdfVAL0;
+ble101 = dfdfVAL1;
+ble101 = dfdfVAL2;
+
+ble110 = dfdfVAL0;
+ble110 = dfdfVAL1;
+ble110 = dfdfVAL2;
+
+ble111 = dfdfVAL0;
+ble111 = dfdfVAL1;
+ble111 = dfdfVAL2;
+
+
 
 )OPENCLPP"
