@@ -1,78 +1,36 @@
 // AUTO-GENERATED FILE: DO NOT MODIFY
 R"OPENCLPP(
 END; hello world END;
-hi0hi ye. 
-HI0hi0 bob  eyey 
-
-REPEATEND; END; 1
-.
-
-ble0 = dfdfVAL0;
-
-ble1 = dfdfVAL0;
-
-
-
-END; hello world END;
-hi0hi ye. hi1hi ye. 
-HI0hi0 HI0hi1 bob HI1hi0 HI1hi1 bob  eyey 
-
-REPEATEND; END; 2
-.
-
-ble00 = dfdfVAL0;
-ble00 = dfdfVAL1;
-
-ble01 = dfdfVAL0;
-ble01 = dfdfVAL1;
-
-ble10 = dfdfVAL0;
-ble10 = dfdfVAL1;
-
-ble11 = dfdfVAL0;
-ble11 = dfdfVAL1;
-
-
-
-END; hello world END;
 hi0hi ye. hi1hi ye. hi2hi ye. 
 HI0hi0 HI0hi1 HI0hi2 bob HI1hi0 HI1hi1 HI1hi2 bob HI2hi0 HI2hi1 HI2hi2 bob  eyey 
 
 REPEATEND; END; 3
 .
 
-ble000 = dfdfVAL0;
-ble000 = dfdfVAL1;
-ble000 = dfdfVAL2;
-
-ble001 = dfdfVAL0;
-ble001 = dfdfVAL1;
-ble001 = dfdfVAL2;
-
-ble010 = dfdfVAL0;
-ble010 = dfdfVAL1;
-ble010 = dfdfVAL2;
-
-ble011 = dfdfVAL0;
-ble011 = dfdfVAL1;
-ble011 = dfdfVAL2;
-
-ble100 = dfdfVAL0;
-ble100 = dfdfVAL1;
-ble100 = dfdfVAL2;
-
-ble101 = dfdfVAL0;
-ble101 = dfdfVAL1;
-ble101 = dfdfVAL2;
-
-ble110 = dfdfVAL0;
-ble110 = dfdfVAL1;
-ble110 = dfdfVAL2;
-
-ble111 = dfdfVAL0;
-ble111 = dfdfVAL1;
-ble111 = dfdfVAL2;
-
+ble000 = dfdf0;
+ble000 = dfdf0;
+ble000 = dfdf0;
+ble001 = dfdf0;
+ble001 = dfdf0;
+ble001 = dfdf1;
+ble010 = dfdf0;
+ble010 = dfdf1;
+ble010 = dfdf0;
+ble011 = dfdf0;
+ble011 = dfdf1;
+ble011 = dfdf1;
+ble100 = dfdf1;
+ble100 = dfdf0;
+ble100 = dfdf0;
+ble101 = dfdf1;
+ble101 = dfdf0;
+ble101 = dfdf1;
+ble110 = dfdf1;
+ble110 = dfdf1;
+ble110 = dfdf0;
+ble111 = dfdf1;
+ble111 = dfdf1;
+ble111 = dfdf1;
 
 
 )OPENCLPP"
