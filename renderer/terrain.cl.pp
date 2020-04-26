@@ -1,11 +1,16 @@
-uint hash(REPEAT IND NUMDIMS int posIND, END; uint octave, uint numGradVecs) {
-  // TODO: WRITE THIS
-  return pos0;
-}
+#ifndef TERRAIN_NON_REP_
+#define TERRAIN_NON_REP_
 
 int fastFloor(float x) {
   int i = x;
   return i - (x < i);
+}
+
+#endif // TERRAIN_NON_REP_
+
+uint hashNUMDIMS(REPEAT IND NUMDIMS int posIND, END; uint octave, uint numGradVecs) {
+  // TODO: WRITE THIS
+  return pos0;
 }
 
 float getNoiseNUMDIMS(REPEAT IND NUMDIMS float scaleIND, float posIND, END;
@@ -23,8 +28,8 @@ float getNoiseNUMDIMS(REPEAT IND NUMDIMS float scaleIND, float posIND, END;
     END;
     float *tmp;
     REPEAT2 BITS VAR NUMDIMS tmp =
-        gradVecs +
-        hash(REPEAT IND NUMDIMS posfIND + VARIND, END; i, numGradVecs);
+        gradVecs + NUMDIMS * hash(REPEAT IND NUMDIMS posfIND + VARIND, END;
+                                  i, numGradVecs);
     float resultBITS = REPEAT IND NUMDIMS vecVARINDIND * (*tmp++) + END;
     0;
     END;

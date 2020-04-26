@@ -227,7 +227,7 @@ Text nextChunk(const std::string &text, std::size_t &i, bool expandRepeats) {
       }
       i -= dimsS.text.size();
       std::size_t tmp = 0;
-      unsigned int dims = strToUInt(dimsS.text, tmp);
+      unsigned int dims = expandRepeats? strToUInt(dimsS.text, tmp) : (tmp = dimsS.text.size(), 0);
       if (dims >= 24) {
         throw std::runtime_error("count is out of range in REPEAT2 statement");
       }

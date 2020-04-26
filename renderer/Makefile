@@ -10,13 +10,13 @@ test_cl.o: test_cl.cpp load_cl.hpp main.cl.inc terrain.cl.inc
 	g++ --std=c++11 -Wall -Wextra -pedantic -g3 -O0 -I. -c -o test_cl.o test_cl.cpp
 
 main.cl.inc: main.cl.pp
-	../preprocess/pp main.cl.pp 3 12 > main.cl.inc
+	../preprocess/pp main.cl.pp 3 8 > main.cl.inc
 
 terrain.cl.inc: terrain.cl.pp
-	../preprocess/pp terrain.cl.pp 3 12 > terrain.cl.inc
+	../preprocess/pp terrain.cl.pp 3 8 > terrain.cl.inc
 
 .PHONY: clean
 
 clean:
-	rm main.cl.inc test_cl.o lodepng/lodepng.o test_cl
+	rm main.cl.inc terrain.cl.inc test_cl.o lodepng/lodepng.o test_cl
 
