@@ -10,19 +10,20 @@ int fastFloor(float x) {
 
 #endif // TERRAIN_NON_REP_
 
-uint hash3( int pos0,  int pos1,  int pos2,  uint octave, uint numGradVecs) {
+uint hash3( int pos0,  int pos1,  int pos2, 
+                 uint octave, uint numGradVecs) {
   // TODO: WRITE THIS
-  return pos0;
+  return (pos0 * pos0 + pos1 + pos2 * pos2 * pos2 + octave) % numGradVecs;
 }
 
 float getNoise3( float scale0, float pos0,  float scale1, float pos1,  float scale2, float pos2, 
-                      float *gradVecs, uint numGradVecs, int numOctaves,
-                      float persistence) {
+                      __global float *gradVecs, uint numGradVecs,
+                      int numOctaves, float persistence) {
   float total = 0;
   float amplitude = 1;
-   pos0 /= scale0;
-   pos1 /= scale1;
-   pos2 /= scale2;
+   pos0 = (pos0 + 0.5) / scale0;
+   pos1 = (pos1 + 0.5) / scale1;
+   pos2 = (pos2 + 0.5) / scale2;
   
   for (uint i = numOctaves; i--;) {
      int posf0 = fastFloor(pos0);
@@ -38,46 +39,54 @@ float getNoise3( float scale0, float pos0,  float scale1, float pos1,  float sca
     float vec12 = vec02 - 1;
     float lerp2 = vec02 * vec02 * (3 - 2 * vec02);
     
-    float *tmp;
+    __global float *tmp;
      tmp =
-        gradVecs + 3 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0, 
-                                  i, numGradVecs);
-    float result000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        3 * hash3( posf0 + 0,  posf1 + 0,  posf2 + 0, 
+                              i, numGradVecs);
+    float result000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] + 
     0;
      tmp =
-        gradVecs + 3 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1, 
-                                  i, numGradVecs);
-    float result001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        3 * hash3( posf0 + 0,  posf1 + 0,  posf2 + 1, 
+                              i, numGradVecs);
+    float result001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] + 
     0;
      tmp =
-        gradVecs + 3 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0, 
-                                  i, numGradVecs);
-    float result010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        3 * hash3( posf0 + 0,  posf1 + 1,  posf2 + 0, 
+                              i, numGradVecs);
+    float result010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] + 
     0;
      tmp =
-        gradVecs + 3 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1, 
-                                  i, numGradVecs);
-    float result011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        3 * hash3( posf0 + 0,  posf1 + 1,  posf2 + 1, 
+                              i, numGradVecs);
+    float result011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] + 
     0;
      tmp =
-        gradVecs + 3 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0, 
-                                  i, numGradVecs);
-    float result100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        3 * hash3( posf0 + 1,  posf1 + 0,  posf2 + 0, 
+                              i, numGradVecs);
+    float result100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] + 
     0;
      tmp =
-        gradVecs + 3 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1, 
-                                  i, numGradVecs);
-    float result101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        3 * hash3( posf0 + 1,  posf1 + 0,  posf2 + 1, 
+                              i, numGradVecs);
+    float result101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] + 
     0;
      tmp =
-        gradVecs + 3 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0, 
-                                  i, numGradVecs);
-    float result110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        3 * hash3( posf0 + 1,  posf1 + 1,  posf2 + 0, 
+                              i, numGradVecs);
+    float result110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] + 
     0;
      tmp =
-        gradVecs + 3 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1, 
-                                  i, numGradVecs);
-    float result111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        3 * hash3( posf0 + 1,  posf1 + 1,  posf2 + 1, 
+                              i, numGradVecs);
+    float result111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] + 
     0;
     
       float result00 =
@@ -118,20 +127,21 @@ int fastFloor(float x) {
 
 #endif // TERRAIN_NON_REP_
 
-uint hash4( int pos0,  int pos1,  int pos2,  int pos3,  uint octave, uint numGradVecs) {
+uint hash4( int pos0,  int pos1,  int pos2,  int pos3, 
+                 uint octave, uint numGradVecs) {
   // TODO: WRITE THIS
-  return pos0;
+  return (pos0 * pos0 + pos1 + pos2 * pos2 * pos2 + octave) % numGradVecs;
 }
 
 float getNoise4( float scale0, float pos0,  float scale1, float pos1,  float scale2, float pos2,  float scale3, float pos3, 
-                      float *gradVecs, uint numGradVecs, int numOctaves,
-                      float persistence) {
+                      __global float *gradVecs, uint numGradVecs,
+                      int numOctaves, float persistence) {
   float total = 0;
   float amplitude = 1;
-   pos0 /= scale0;
-   pos1 /= scale1;
-   pos2 /= scale2;
-   pos3 /= scale3;
+   pos0 = (pos0 + 0.5) / scale0;
+   pos1 = (pos1 + 0.5) / scale1;
+   pos2 = (pos2 + 0.5) / scale2;
+   pos3 = (pos3 + 0.5) / scale3;
   
   for (uint i = numOctaves; i--;) {
      int posf0 = fastFloor(pos0);
@@ -151,86 +161,102 @@ float getNoise4( float scale0, float pos0,  float scale1, float pos1,  float sca
     float vec13 = vec03 - 1;
     float lerp3 = vec03 * vec03 * (3 - 2 * vec03);
     
-    float *tmp;
+    __global float *tmp;
      tmp =
-        gradVecs + 4 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0, 
-                                  i, numGradVecs);
-    float result0000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0, 
+                              i, numGradVecs);
+    float result0000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1, 
-                                  i, numGradVecs);
-    float result0001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1, 
+                              i, numGradVecs);
+    float result0001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0, 
-                                  i, numGradVecs);
-    float result0010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0, 
+                              i, numGradVecs);
+    float result0010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1, 
-                                  i, numGradVecs);
-    float result0011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1, 
+                              i, numGradVecs);
+    float result0011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0, 
-                                  i, numGradVecs);
-    float result0100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0, 
+                              i, numGradVecs);
+    float result0100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1, 
-                                  i, numGradVecs);
-    float result0101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1, 
+                              i, numGradVecs);
+    float result0101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0, 
-                                  i, numGradVecs);
-    float result0110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0, 
+                              i, numGradVecs);
+    float result0110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1, 
-                                  i, numGradVecs);
-    float result0111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1, 
+                              i, numGradVecs);
+    float result0111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0, 
-                                  i, numGradVecs);
-    float result1000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0, 
+                              i, numGradVecs);
+    float result1000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1, 
-                                  i, numGradVecs);
-    float result1001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1, 
+                              i, numGradVecs);
+    float result1001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0, 
-                                  i, numGradVecs);
-    float result1010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0, 
+                              i, numGradVecs);
+    float result1010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1, 
-                                  i, numGradVecs);
-    float result1011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1, 
+                              i, numGradVecs);
+    float result1011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0, 
-                                  i, numGradVecs);
-    float result1100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0, 
+                              i, numGradVecs);
+    float result1100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1, 
-                                  i, numGradVecs);
-    float result1101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1, 
+                              i, numGradVecs);
+    float result1101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0, 
-                                  i, numGradVecs);
-    float result1110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0, 
+                              i, numGradVecs);
+    float result1110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] + 
     0;
      tmp =
-        gradVecs + 4 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1, 
-                                  i, numGradVecs);
-    float result1111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        4 * hash4( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1, 
+                              i, numGradVecs);
+    float result1111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] + 
     0;
     
       float result000 =
@@ -289,21 +315,22 @@ int fastFloor(float x) {
 
 #endif // TERRAIN_NON_REP_
 
-uint hash5( int pos0,  int pos1,  int pos2,  int pos3,  int pos4,  uint octave, uint numGradVecs) {
+uint hash5( int pos0,  int pos1,  int pos2,  int pos3,  int pos4, 
+                 uint octave, uint numGradVecs) {
   // TODO: WRITE THIS
-  return pos0;
+  return (pos0 * pos0 + pos1 + pos2 * pos2 * pos2 + octave) % numGradVecs;
 }
 
 float getNoise5( float scale0, float pos0,  float scale1, float pos1,  float scale2, float pos2,  float scale3, float pos3,  float scale4, float pos4, 
-                      float *gradVecs, uint numGradVecs, int numOctaves,
-                      float persistence) {
+                      __global float *gradVecs, uint numGradVecs,
+                      int numOctaves, float persistence) {
   float total = 0;
   float amplitude = 1;
-   pos0 /= scale0;
-   pos1 /= scale1;
-   pos2 /= scale2;
-   pos3 /= scale3;
-   pos4 /= scale4;
+   pos0 = (pos0 + 0.5) / scale0;
+   pos1 = (pos1 + 0.5) / scale1;
+   pos2 = (pos2 + 0.5) / scale2;
+   pos3 = (pos3 + 0.5) / scale3;
+   pos4 = (pos4 + 0.5) / scale4;
   
   for (uint i = numOctaves; i--;) {
      int posf0 = fastFloor(pos0);
@@ -327,166 +354,198 @@ float getNoise5( float scale0, float pos0,  float scale1, float pos1,  float sca
     float vec14 = vec04 - 1;
     float lerp4 = vec04 * vec04 * (3 - 2 * vec04);
     
-    float *tmp;
+    __global float *tmp;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result00000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0, 
+                              i, numGradVecs);
+    float result00000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result00001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1, 
+                              i, numGradVecs);
+    float result00001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result00010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0, 
+                              i, numGradVecs);
+    float result00010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result00011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1, 
+                              i, numGradVecs);
+    float result00011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result00100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0, 
+                              i, numGradVecs);
+    float result00100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result00101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1, 
+                              i, numGradVecs);
+    float result00101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result00110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0, 
+                              i, numGradVecs);
+    float result00110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result00111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1, 
+                              i, numGradVecs);
+    float result00111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result01000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0, 
+                              i, numGradVecs);
+    float result01000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result01001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1, 
+                              i, numGradVecs);
+    float result01001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result01010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0, 
+                              i, numGradVecs);
+    float result01010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result01011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1, 
+                              i, numGradVecs);
+    float result01011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result01100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0, 
+                              i, numGradVecs);
+    float result01100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result01101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1, 
+                              i, numGradVecs);
+    float result01101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result01110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0, 
+                              i, numGradVecs);
+    float result01110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result01111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1, 
+                              i, numGradVecs);
+    float result01111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result10000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0, 
+                              i, numGradVecs);
+    float result10000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result10001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1, 
+                              i, numGradVecs);
+    float result10001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result10010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0, 
+                              i, numGradVecs);
+    float result10010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result10011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1, 
+                              i, numGradVecs);
+    float result10011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result10100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0, 
+                              i, numGradVecs);
+    float result10100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result10101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1, 
+                              i, numGradVecs);
+    float result10101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result10110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0, 
+                              i, numGradVecs);
+    float result10110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result10111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1, 
+                              i, numGradVecs);
+    float result10111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result11000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0, 
+                              i, numGradVecs);
+    float result11000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result11001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1, 
+                              i, numGradVecs);
+    float result11001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result11010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0, 
+                              i, numGradVecs);
+    float result11010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result11011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1, 
+                              i, numGradVecs);
+    float result11011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result11100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0, 
+                              i, numGradVecs);
+    float result11100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result11101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1, 
+                              i, numGradVecs);
+    float result11101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0, 
-                                  i, numGradVecs);
-    float result11110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0, 
+                              i, numGradVecs);
+    float result11110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] + 
     0;
      tmp =
-        gradVecs + 5 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1, 
-                                  i, numGradVecs);
-    float result11111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        5 * hash5( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1, 
+                              i, numGradVecs);
+    float result11111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] + 
     0;
     
       float result0000 =
@@ -579,22 +638,23 @@ int fastFloor(float x) {
 
 #endif // TERRAIN_NON_REP_
 
-uint hash6( int pos0,  int pos1,  int pos2,  int pos3,  int pos4,  int pos5,  uint octave, uint numGradVecs) {
+uint hash6( int pos0,  int pos1,  int pos2,  int pos3,  int pos4,  int pos5, 
+                 uint octave, uint numGradVecs) {
   // TODO: WRITE THIS
-  return pos0;
+  return (pos0 * pos0 + pos1 + pos2 * pos2 * pos2 + octave) % numGradVecs;
 }
 
 float getNoise6( float scale0, float pos0,  float scale1, float pos1,  float scale2, float pos2,  float scale3, float pos3,  float scale4, float pos4,  float scale5, float pos5, 
-                      float *gradVecs, uint numGradVecs, int numOctaves,
-                      float persistence) {
+                      __global float *gradVecs, uint numGradVecs,
+                      int numOctaves, float persistence) {
   float total = 0;
   float amplitude = 1;
-   pos0 /= scale0;
-   pos1 /= scale1;
-   pos2 /= scale2;
-   pos3 /= scale3;
-   pos4 /= scale4;
-   pos5 /= scale5;
+   pos0 = (pos0 + 0.5) / scale0;
+   pos1 = (pos1 + 0.5) / scale1;
+   pos2 = (pos2 + 0.5) / scale2;
+   pos3 = (pos3 + 0.5) / scale3;
+   pos4 = (pos4 + 0.5) / scale4;
+   pos5 = (pos5 + 0.5) / scale5;
   
   for (uint i = numOctaves; i--;) {
      int posf0 = fastFloor(pos0);
@@ -622,326 +682,390 @@ float getNoise6( float scale0, float pos0,  float scale1, float pos1,  float sca
     float vec15 = vec05 - 1;
     float lerp5 = vec05 * vec05 * (3 - 2 * vec05);
     
-    float *tmp;
+    __global float *tmp;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result000000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result000000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result000001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result000001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result000010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result000010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result000011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result000011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result000100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result000100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result000101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result000101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result000110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result000110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result000111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result000111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result001000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result001000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result001001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result001001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result001010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result001010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result001011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result001011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result001100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result001100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result001101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result001101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result001110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result001110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result001111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result001111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result010000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result010000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result010001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result010001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result010010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result010010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result010011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result010011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result010100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result010100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result010101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result010101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result010110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result010110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result010111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result010111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result011000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result011000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result011001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result011001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result011010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result011010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result011011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result011011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result011100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result011100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result011101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result011101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result011110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result011110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result011111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result011111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result100000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result100000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result100001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result100001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result100010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result100010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result100011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result100011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result100100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result100100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result100101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result100101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result100110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result100110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result100111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result100111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result101000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result101000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result101001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result101001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result101010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result101010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result101011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result101011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result101100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result101100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result101101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result101101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result101110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result101110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result101111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result101111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result110000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result110000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result110001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result110001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result110010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result110010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result110011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result110011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result110100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result110100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result110101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result110101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result110110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result110110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result110111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result110111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result111000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result111000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result111001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result111001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result111010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result111010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result111011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result111011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result111100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0, 
+                              i, numGradVecs);
+    float result111100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result111101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1, 
+                              i, numGradVecs);
+    float result111101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
-                                  i, numGradVecs);
-    float result111110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0, 
+                              i, numGradVecs);
+    float result111110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] + 
     0;
      tmp =
-        gradVecs + 6 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
-                                  i, numGradVecs);
-    float result111111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        6 * hash6( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1, 
+                              i, numGradVecs);
+    float result111111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] + 
     0;
     
       float result00000 =
@@ -1100,23 +1224,24 @@ int fastFloor(float x) {
 
 #endif // TERRAIN_NON_REP_
 
-uint hash7( int pos0,  int pos1,  int pos2,  int pos3,  int pos4,  int pos5,  int pos6,  uint octave, uint numGradVecs) {
+uint hash7( int pos0,  int pos1,  int pos2,  int pos3,  int pos4,  int pos5,  int pos6, 
+                 uint octave, uint numGradVecs) {
   // TODO: WRITE THIS
-  return pos0;
+  return (pos0 * pos0 + pos1 + pos2 * pos2 * pos2 + octave) % numGradVecs;
 }
 
 float getNoise7( float scale0, float pos0,  float scale1, float pos1,  float scale2, float pos2,  float scale3, float pos3,  float scale4, float pos4,  float scale5, float pos5,  float scale6, float pos6, 
-                      float *gradVecs, uint numGradVecs, int numOctaves,
-                      float persistence) {
+                      __global float *gradVecs, uint numGradVecs,
+                      int numOctaves, float persistence) {
   float total = 0;
   float amplitude = 1;
-   pos0 /= scale0;
-   pos1 /= scale1;
-   pos2 /= scale2;
-   pos3 /= scale3;
-   pos4 /= scale4;
-   pos5 /= scale5;
-   pos6 /= scale6;
+   pos0 = (pos0 + 0.5) / scale0;
+   pos1 = (pos1 + 0.5) / scale1;
+   pos2 = (pos2 + 0.5) / scale2;
+   pos3 = (pos3 + 0.5) / scale3;
+   pos4 = (pos4 + 0.5) / scale4;
+   pos5 = (pos5 + 0.5) / scale5;
+   pos6 = (pos6 + 0.5) / scale6;
   
   for (uint i = numOctaves; i--;) {
      int posf0 = fastFloor(pos0);
@@ -1148,646 +1273,774 @@ float getNoise7( float scale0, float pos0,  float scale1, float pos1,  float sca
     float vec16 = vec06 - 1;
     float lerp6 = vec06 * vec06 * (3 - 2 * vec06);
     
-    float *tmp;
+    __global float *tmp;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0000000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0000000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0000001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0000001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0000010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0000010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0000011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0000011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0000100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0000100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0000101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0000101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0000110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0000110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0000111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0000111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0001000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0001000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0001001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0001001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0001010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0001010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0001011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0001011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0001100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0001100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0001101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0001101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0001110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0001110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0001111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0001111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0010000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0010000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0010001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0010001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0010010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0010010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0010011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0010011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0010100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0010100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0010101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0010101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0010110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0010110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0010111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0010111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0011000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0011000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0011001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0011001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0011010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0011010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0011011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0011011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0011100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0011100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0011101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0011101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0011110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0011110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0011111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0011111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0100000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0100000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0100001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0100001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0100010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0100010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0100011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0100011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0100100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0100100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0100101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0100101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0100110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0100110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0100111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0100111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0101000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0101000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0101001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0101001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0101010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0101010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0101011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0101011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0101100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0101100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0101101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0101101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0101110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0101110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0101111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0101111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0110000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0110000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0110001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0110001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0110010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0110010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0110011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0110011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0110100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0110100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0110101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0110101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0110110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0110110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0110111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0110111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0111000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0111000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0111001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0111001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0111010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0111010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0111011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0111011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0111100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0111100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0111101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0111101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result0111110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result0111110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result0111111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result0111111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1000000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1000000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1000001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1000001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1000010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1000010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1000011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1000011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1000100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1000100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1000101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1000101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1000110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1000110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1000111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1000111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1001000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1001000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1001001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1001001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1001010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1001010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1001011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1001011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1001100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1001100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1001101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1001101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1001110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1001110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1001111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1001111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1010000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1010000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1010001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1010001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1010010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1010010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1010011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1010011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1010100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1010100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1010101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1010101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1010110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1010110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1010111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1010111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1011000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1011000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1011001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1011001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1011010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1011010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1011011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1011011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1011100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1011100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1011101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1011101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1011110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1011110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1011111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1011111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1100000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1100000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1100001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1100001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1100010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1100010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1100011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1100011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1100100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1100100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1100101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1100101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1100110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1100110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1100111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1100111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1101000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1101000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1101001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1101001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1101010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1101010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1101011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1101011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1101100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1101100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1101101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1101101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1101110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1101110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1101111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1101111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1110000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1110000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1110001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1110001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1110010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1110010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1110011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1110011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1110100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1110100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1110101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1110101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1110110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1110110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1110111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1110111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1111000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1111000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1111001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1111001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1111010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1111010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1111011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1111011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1111100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1111100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1111101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1111101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
-                                  i, numGradVecs);
-    float result1111110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0, 
+                              i, numGradVecs);
+    float result1111110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] + 
     0;
      tmp =
-        gradVecs + 7 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
-                                  i, numGradVecs);
-    float result1111111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        7 * hash7( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1, 
+                              i, numGradVecs);
+    float result1111111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] + 
     0;
     
       float result000000 =
@@ -2076,24 +2329,25 @@ int fastFloor(float x) {
 
 #endif // TERRAIN_NON_REP_
 
-uint hash8( int pos0,  int pos1,  int pos2,  int pos3,  int pos4,  int pos5,  int pos6,  int pos7,  uint octave, uint numGradVecs) {
+uint hash8( int pos0,  int pos1,  int pos2,  int pos3,  int pos4,  int pos5,  int pos6,  int pos7, 
+                 uint octave, uint numGradVecs) {
   // TODO: WRITE THIS
-  return pos0;
+  return (pos0 * pos0 + pos1 + pos2 * pos2 * pos2 + octave) % numGradVecs;
 }
 
 float getNoise8( float scale0, float pos0,  float scale1, float pos1,  float scale2, float pos2,  float scale3, float pos3,  float scale4, float pos4,  float scale5, float pos5,  float scale6, float pos6,  float scale7, float pos7, 
-                      float *gradVecs, uint numGradVecs, int numOctaves,
-                      float persistence) {
+                      __global float *gradVecs, uint numGradVecs,
+                      int numOctaves, float persistence) {
   float total = 0;
   float amplitude = 1;
-   pos0 /= scale0;
-   pos1 /= scale1;
-   pos2 /= scale2;
-   pos3 /= scale3;
-   pos4 /= scale4;
-   pos5 /= scale5;
-   pos6 /= scale6;
-   pos7 /= scale7;
+   pos0 = (pos0 + 0.5) / scale0;
+   pos1 = (pos1 + 0.5) / scale1;
+   pos2 = (pos2 + 0.5) / scale2;
+   pos3 = (pos3 + 0.5) / scale3;
+   pos4 = (pos4 + 0.5) / scale4;
+   pos5 = (pos5 + 0.5) / scale5;
+   pos6 = (pos6 + 0.5) / scale6;
+   pos7 = (pos7 + 0.5) / scale7;
   
   for (uint i = numOctaves; i--;) {
      int posf0 = fastFloor(pos0);
@@ -2129,1286 +2383,1542 @@ float getNoise8( float scale0, float pos0,  float scale1, float pos1,  float sca
     float vec17 = vec07 - 1;
     float lerp7 = vec07 * vec07 * (3 - 2 * vec07);
     
-    float *tmp;
+    __global float *tmp;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00000000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00000000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00000001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00000001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00000010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00000010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00000011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00000011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00000100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00000100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00000101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00000101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00000110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00000110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00000111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00000111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00001000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00001000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00001001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00001001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00001010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00001010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00001011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00001011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00001100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00001100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00001101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00001101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00001110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00001110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00001111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00001111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00010000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00010000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00010001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00010001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00010010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00010010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00010011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00010011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00010100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00010100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00010101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00010101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00010110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00010110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00010111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00010111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00011000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00011000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00011001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00011001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00011010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00011010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00011011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00011011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00011100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00011100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00011101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00011101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00011110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00011110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00011111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00011111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00100000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00100000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00100001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00100001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00100010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00100010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00100011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00100011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00100100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00100100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00100101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00100101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00100110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00100110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00100111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00100111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00101000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00101000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00101001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00101001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00101010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00101010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00101011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00101011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00101100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00101100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00101101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00101101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00101110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00101110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00101111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00101111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00110000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00110000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00110001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00110001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00110010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00110010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00110011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00110011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00110100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00110100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00110101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00110101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00110110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00110110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00110111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00110111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00111000 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00111000 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00111001 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00111001 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00111010 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00111010 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00111011 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00111011 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00111100 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00111100 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00111101 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00111101 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result00111110 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result00111110 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result00111111 =  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result00111111 =  vec00 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01000000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01000000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01000001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01000001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01000010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01000010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01000011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01000011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01000100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01000100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01000101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01000101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01000110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01000110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01000111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01000111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01001000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01001000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01001001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01001001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01001010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01001010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01001011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01001011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01001100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01001100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01001101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01001101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01001110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01001110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01001111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01001111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01010000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01010000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01010001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01010001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01010010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01010010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01010011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01010011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01010100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01010100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01010101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01010101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01010110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01010110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01010111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01010111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01011000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01011000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01011001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01011001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01011010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01011010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01011011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01011011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01011100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01011100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01011101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01011101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01011110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01011110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01011111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01011111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01100000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01100000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01100001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01100001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01100010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01100010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01100011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01100011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01100100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01100100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01100101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01100101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01100110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01100110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01100111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01100111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01101000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01101000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01101001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01101001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01101010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01101010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01101011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01101011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01101100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01101100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01101101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01101101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01101110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01101110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01101111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01101111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01110000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01110000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01110001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01110001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01110010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01110010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01110011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01110011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01110100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01110100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01110101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01110101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01110110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01110110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01110111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01110111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01111000 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01111000 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01111001 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01111001 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01111010 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01111010 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01111011 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01111011 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01111100 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01111100 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01111101 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01111101 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result01111110 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result01111110 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result01111111 =  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 0,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result01111111 =  vec00 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10000000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10000000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10000001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10000001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10000010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10000010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10000011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10000011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10000100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10000100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10000101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10000101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10000110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10000110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10000111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10000111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10001000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10001000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10001001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10001001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10001010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10001010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10001011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10001011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10001100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10001100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10001101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10001101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10001110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10001110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10001111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10001111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10010000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10010000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10010001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10010001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10010010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10010010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10010011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10010011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10010100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10010100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10010101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10010101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10010110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10010110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10010111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10010111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10011000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10011000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10011001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10011001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10011010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10011010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10011011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10011011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10011100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10011100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10011101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10011101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10011110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10011110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10011111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10011111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10100000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10100000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10100001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10100001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10100010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10100010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10100011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10100011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10100100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10100100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10100101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10100101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10100110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10100110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10100111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10100111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10101000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10101000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10101001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10101001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10101010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10101010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10101011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10101011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10101100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10101100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10101101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10101101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10101110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10101110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10101111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10101111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10110000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10110000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10110001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10110001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10110010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10110010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10110011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10110011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10110100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10110100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10110101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10110101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10110110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10110110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10110111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10110111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10111000 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10111000 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10111001 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10111001 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10111010 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10111010 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10111011 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10111011 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10111100 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10111100 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10111101 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10111101 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result10111110 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result10111110 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result10111111 =  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 0,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result10111111 =  vec10 * tmp[0] +  vec01 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11000000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11000000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11000001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11000001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11000010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11000010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11000011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11000011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11000100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11000100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11000101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11000101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11000110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11000110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11000111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11000111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11001000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11001000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11001001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11001001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11001010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11001010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11001011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11001011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11001100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11001100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11001101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11001101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11001110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11001110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11001111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11001111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11010000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11010000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11010001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11010001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11010010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11010010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11010011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11010011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11010100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11010100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11010101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11010101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11010110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11010110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11010111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11010111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11011000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11011000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11011001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11011001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11011010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11011010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11011011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11011011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11011100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11011100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11011101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11011101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11011110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11011110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11011111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 0,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11011111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec02 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11100000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11100000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11100001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11100001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11100010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11100010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11100011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11100011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11100100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11100100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11100101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11100101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11100110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11100110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11100111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11100111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11101000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11101000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11101001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11101001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11101010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11101010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11101011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11101011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11101100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11101100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11101101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11101101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11101110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11101110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11101111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 0,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11101111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec03 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11110000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11110000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11110001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11110001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11110010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11110010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11110011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11110011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11110100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11110100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11110101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11110101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11110110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11110110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11110111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 0,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11110111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec04 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11111000 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11111000 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11111001 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11111001 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11111010 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11111010 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11111011 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 0,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11111011 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec05 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11111100 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11111100 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11111101 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 0,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11111101 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec06 * tmp[6] +  vec17 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
-                                  i, numGradVecs);
-    float result11111110 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec0IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 0, 
+                              i, numGradVecs);
+    float result11111110 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec07 * tmp[7] + 
     0;
      tmp =
-        gradVecs + 8 * hash( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
-                                  i, numGradVecs);
-    float result11111111 =  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) +  vec1IND * (*tmp++) + 
+        gradVecs +
+        8 * hash8( posf0 + 1,  posf1 + 1,  posf2 + 1,  posf3 + 1,  posf4 + 1,  posf5 + 1,  posf6 + 1,  posf7 + 1, 
+                              i, numGradVecs);
+    float result11111111 =  vec10 * tmp[0] +  vec11 * tmp[1] +  vec12 * tmp[2] +  vec13 * tmp[3] +  vec14 * tmp[4] +  vec15 * tmp[5] +  vec16 * tmp[6] +  vec17 * tmp[7] + 
     0;
     
       float result0000000 =

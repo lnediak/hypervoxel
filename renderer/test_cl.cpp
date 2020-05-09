@@ -1,34 +1,37 @@
 #include <iostream>
 #include <load_cl.hpp>
 #include <lodepng/lodepng.h>
+#include <memory>
 #include <random>
 #include <time.h>
+#include <unistd.h>
 
-cl_uint *generateNode(cl_uint *octree, std::size_t numDims,
-                      std::mt19937 &mtrand, cl_float sidelength) {
-  cl_uint isLeaf;
-  std::uniform_real_distribution<> distroF(0, 1);
-  if (sidelength <= 1) {
-    isLeaf = 1;
-  } else {
-    isLeaf = distroF(mtrand) < 0.08;
+std::unique_ptr<cl_float[]> getGradVecs(unsigned numGradVecs,
+                                        std::size_t numDims, unsigned seed) {
+  std::unique_ptr<cl_float[]> gradVecs(new cl_float[numGradVecs * numDims]);
+  std::mt19937 mtrand(seed);
+  double pi2 = 2 * 3.141592653589792653589793238462643383;
+  // assuming numGradVecs is even (which it is)
+  for (std::size_t i = 0; i < numGradVecs * numDims; i += 2) {
+    double u1 = (1 - mtrand() / 4294967296.0);
+    double u2 = (1 - mtrand() / 4294967296.0);
+    double r = std::sqrt(-2 * std::log(u1));
+    gradVecs[i] = r * std::cos(pi2 * u2);
+    gradVecs[i + 1] = r * std::sin(pi2 * u2);
   }
-  std::uniform_int_distribution<cl_uint> distroI(0, 0xFFFFFFFF);
-  cl_uint color = distroF(mtrand) < 0.6 ? 0 : (distroI(mtrand) & ~0xFF) | 0xA0;
-  *octree++ = isLeaf;
-  if (isLeaf) {
-    *octree++ = color;
-    return octree;
+  for (std::size_t i = 0; i < numGradVecs; i++) {
+    double norm = 0;
+    for (std::size_t j = 0; j < numDims; j++) {
+      norm += gradVecs[numDims * i + j] * gradVecs[numDims * i + j];
+    }
+    // the likelihood of norm being less than 1e-12 in 3 dimensions
+    // (chi-squared random variable) is insanely small
+    norm = std::sqrt(norm);
+    for (std::size_t j = 0; j < numDims; j++) {
+      gradVecs[numDims * i + j] /= norm;
+    }
   }
-  std::size_t numChildren = 1 << numDims;
-  cl_uint *children = octree;
-  cl_uint *currPtr = octree + numChildren;
-  cl_float newSlen = sidelength / 2;
-  for (std::size_t child = 0; child < numChildren; child++) {
-    *octree++ = currPtr - children;
-    currPtr = generateNode(currPtr, numDims, mtrand, newSlen);
-  }
-  return currPtr;
+  return gradVecs;
 }
 
 int main() {
@@ -38,30 +41,37 @@ int main() {
   cl_float *currBvhF = reinterpret_cast<cl_float *>(bvh);
   for (std::size_t i = 0; i < numDims; i++) {
     *currBvhF++ = 0;  // min
-    *currBvhF++ = 16; // max
+    *currBvhF++ = 64; // max
   }
   cl_uint *currBvh = reinterpret_cast<cl_uint *>(currBvhF);
-  *currBvh++ = 1; // isOctree
-  *currBvh++ = 1; // octree
-  cl_float *octreeF = reinterpret_cast<cl_float *>(currBvh);
+  *currBvh++ = 2; // objType
+  *currBvh++ = 1; // obj
+  cl_float *objectF = reinterpret_cast<cl_float *>(currBvh);
   for (std::size_t i = 0; i < numDims; i++) {
-    *octreeF++ = 0; // origin
+    *objectF++ = 0.0f; // origin
   }
-  *octreeF++ = 16;
-  cl_uint *octree = reinterpret_cast<cl_uint *>(octreeF);
-  std::mt19937 mtrand(1);
-  generateNode(octree, numDims, mtrand, 16);
-  RenderKernel kernel =
-      compileRenderKernel(clStuff, numDims, 1048576, width, height);
+  cl_uint *object = reinterpret_cast<cl_uint *>(objectF);
+  for (std::size_t i = 0; i < numDims; i++) {
+    *object++ = 64; // objDims
+  }
+  *object++ = 1; // hashMapSize
+  for (std::size_t i = 0; i <= numDims; i++) {
+    *object++ = 0; // hashMap
+  }
+  RenderKernel kernel = compileRenderKernel(clStuff, numDims, 1048576, width,
+                                            height, 4096, 3, 0.5);
   kernel.writeBvh(clStuff, bvh, 1048576);
-  cl_float pos[] = {8, 8, -4};
+  cl_float pos[] = {32, 32, -40};
   cl_float forward[] = {0, 0, 1};
   cl_float right[] = {1, 0, 0};
   cl_float up[] = {0, 1, 0};
+  cl_float scale[] = {64, 64, 64};
   kernel.writePos(clStuff, pos);
   kernel.writeForward(clStuff, forward);
   kernel.writeRight(clStuff, right);
   kernel.writeUp(clStuff, up);
+  kernel.writeScale(clStuff, scale);
+  kernel.writeGradVecs(clStuff, getGradVecs(4096, 3, 2).get(), 4096);
   try {
     /*
     for (std::size_t col = 0; col < width; col++) {
@@ -110,7 +120,17 @@ int main() {
       std::cout << "StackInd: " << *distp++ << std::endl;
       std::cout << std::endl << std::endl;
     } */
-    kernel.run(clStuff, width, height).wait();
+    cl::Event ev = kernel.run(clStuff, width, height);
+    ev.wait();
+    for (std::size_t i = 10; i--;) {
+      sleep(2);
+      if (ev.getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>() != CL_RUNNING) {
+        std::cout << "Not running anymore!" << std::endl;
+        break;
+      }
+    }
+    std::cout << "Time's up!" << std::endl;
+    //throw std::runtime_error("Owned");
   } catch (const cl::Error &err) {
     throw std::runtime_error(getClErrorString(err));
   }

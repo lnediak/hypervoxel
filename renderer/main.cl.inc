@@ -3,20 +3,24 @@ R"OPENCLPP(
 #ifndef NON_REP_
 #define NON_REP_
 
-uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
-  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha,
+                        uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) *
+                                   (255 - frontAlpha) * (back & 0xFF) /
+                                   255.0f) /
+         combinedAlpha;
 }
 
 void placeBehind(uint color, __global uchar *img) {
   uchar frontAlpha = *(img + 3);
-  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  uchar combinedAlpha =
+      frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
   *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
-  img++;
-  *img = combinedAlpha;
+  *++img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -25,14 +29,14 @@ void placeBehind(uint color, __global uchar *img) {
 BVH format:
 
 float minmax[3][2];
-int isOctree;
+int objType;
 
-The struct is different for leaf nodes (nodes where isOctree). The rest of the
-struct for a leaf node is as follows:
+The struct is different for leaf nodes (nodes where objType > 0). The rest of
+the struct for a leaf node is as follows:
 
-int octree;
-This is the value of octreePtr - &octree, where octreePtr is a pointer to the
-octree.
+int obj;
+This is the value of objPtr - &obj, where objPtr is a pointer to the
+object.
 
 The rest of the struct for a non-leaf node is as follows:
 
@@ -50,266 +54,21 @@ each other. Along this axis, left must be on the left of right.
 
 
 
-Octree format:
-// TODO: IMPLEMENT ROTATED OCTREES
-
-Header:
+Object format:
+// TODO: IMPLEMENT ROTATED OBJECTS
 
 float origin[3];
-float sidelength;
-This is the sidelength of the root node.
-
-The root node is immediately after the header.
-
-Node:
-
-int isLeaf;
-If isLeaf, then the following immediately follows:
-
-int color;
-
-Otherwise, the following immediately follows:
-
-int children[2 ** 3];
-The index of the node with minimum coordinates is 0, while changing the 2 **
-IND bit would change only the coordinate on axis IND.
-
-Each value in children in equal to childPtr - children, where childPtr is a
-pointer to the corresponding node.
+uint objDims[3];
+uint hashMapSize;
+uint hashMap[hashMapSize][3 + 1];
 
 */
-typedef struct StackEntry3 {
-
-  bool indexed;
-  __global uint *node;
-  size_t index;
-   float middle0;
-  float farEnd0;
-   float middle1;
-  float farEnd1;
-   float middle2;
-  float farEnd2;
-  
-} StackEntry3;
-
-void makeChild3(const StackEntry3 *parent, size_t index,
-                      StackEntry3 *child) {
-  child->indexed = false;
-  child->node = parent->node + 1 + parent->node[index + 1];
-   child->middle0 =
-      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
-      (((index >> 0) & 1) ^ (parent->farEnd0 < parent->middle0)) *
-          (parent->farEnd0 - parent->middle0);
-  child->farEnd0 =
-      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
-   child->middle1 =
-      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
-      (((index >> 1) & 1) ^ (parent->farEnd1 < parent->middle1)) *
-          (parent->farEnd1 - parent->middle1);
-  child->farEnd1 =
-      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
-   child->middle2 =
-      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
-      (((index >> 2) & 1) ^ (parent->farEnd2 < parent->middle2)) *
-          (parent->farEnd2 - parent->middle2);
-  child->farEnd2 =
-      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
-  
-}
-
-bool traverseOctree3(__global uint *octree,
-                            float pos0, float dir0,
-                           float invdir0,  float pos1, float dir1,
-                           float invdir1,  float pos2, float dir2,
-                           float invdir2, 
-                           __global uchar * img, __global float *dist) {
-  __global float *header = (__global float *)octree;
-   float origin0 = *header++;
-   float origin1 = *header++;
-   float origin2 = *header++;
-  
-  float sidelength = *header++;
-  octree = (__global uint *)header;
-
-  float tminMax = 1e-8f;
-  float tmaxMin = FLT_MAX;
-   float t00 = (origin0 - pos0) * invdir0;
-  float t10 = (origin0 + sidelength - pos0) * invdir0;
-  tminMax = fmax(tminMax, fmin(t00, t10));
-  tmaxMin = fmin(tmaxMin, fmax(t00, t10));
-   float t01 = (origin1 - pos1) * invdir1;
-  float t11 = (origin1 + sidelength - pos1) * invdir1;
-  tminMax = fmax(tminMax, fmin(t01, t11));
-  tmaxMin = fmin(tmaxMin, fmax(t01, t11));
-   float t02 = (origin2 - pos2) * invdir2;
-  float t12 = (origin2 + sidelength - pos2) * invdir2;
-  tminMax = fmax(tminMax, fmin(t02, t12));
-  tmaxMin = fmin(tmaxMin, fmax(t02, t12));
-  
-  if (tminMax >= tmaxMin) {
-    return false;
-  }
-
-  float currDist = tminMax + 1e-3f;
-   float currPos0 = pos0 + currDist * dir0;
-   float currPos1 = pos1 + currDist * dir1;
-   float currPos2 = pos2 + currDist * dir2;
-  
-
-  StackEntry3 stack[12];
-  size_t stackInd = 0;
-  StackEntry3 baseEntry;
-  baseEntry.indexed = false;
-  baseEntry.node = octree;
-   baseEntry.middle0 = origin0 + sidelength / 2;
-  baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
-   baseEntry.middle1 = origin1 + sidelength / 2;
-  baseEntry.farEnd1 = origin1 + (invdir1 > 0) * sidelength;
-   baseEntry.middle2 = origin2 + sidelength / 2;
-  baseEntry.farEnd2 = origin2 + (invdir2 > 0) * sidelength;
-  
-  stack[stackInd++] = baseEntry;
-  bool debug = true;
-  __global float *distp = dist;
-  size_t i = 0;
-  while (stackInd && i < 100) {
-    i++;
-    StackEntry3 entry = stack[--stackInd];
-    /*
-    if (debug) {
-      printf("currDist: %f, entry.indexed: %i, entry.index: %lu\n", currDist,
-             (int)entry.indexed, entry.index);
-       printf(
-          "currPos0: %f, entry.middle0: %f, entry.farEnd0: %f\n",
-          currPos0, entry.middle0, entry.farEnd0);
-       printf(
-          "currPos1: %f, entry.middle1: %f, entry.farEnd1: %f\n",
-          currPos1, entry.middle1, entry.farEnd1);
-       printf(
-          "currPos2: %f, entry.middle2: %f, entry.farEnd2: %f\n",
-          currPos2, entry.middle2, entry.farEnd2);
-      
-      if (*entry.node) {
-        printf("Leaf node\n");
-      } else {
-        printf("\n");
-      }
-    }
-    */
-    /*
-    *distp++ = currDist;
-     *distp++ = currPos0;
-    *distp++ = invdir0;
-    *distp++ = entry.middle0;
-    *distp++ = entry.farEnd0;
-     *distp++ = currPos1;
-    *distp++ = invdir1;
-    *distp++ = entry.middle1;
-    *distp++ = entry.farEnd1;
-     *distp++ = currPos2;
-    *distp++ = invdir2;
-    *distp++ = entry.middle2;
-    *distp++ = entry.farEnd2;
-    
-    *distp++ = *entry.node;
-    *distp++ = stackInd;
-    */
-    if (*entry.node) {
-      // this is a leaf node
-      placeBehind(*(entry.node + 1), img);
-      if (*(img + 3) == 0xFF) {
-        *dist = currDist;
-        return true;
-      }
-      float minStep = FLT_MAX;
-       minStep =
-          fmin(minStep, (entry.farEnd0 - currPos0) * invdir0);
-       minStep =
-          fmin(minStep, (entry.farEnd1 - currPos1) * invdir1);
-       minStep =
-          fmin(minStep, (entry.farEnd2 - currPos2) * invdir2);
-      
-      if (minStep <= -1e-3f) {
-        continue;
-      }
-      currDist += minStep + 1e-3f;
-       currPos0 = pos0 + currDist * dir0;
-       currPos1 = pos1 + currDist * dir1;
-       currPos2 = pos2 + currDist * dir2;
-      
-    } else {
-      size_t newIndex = (
-                            ((currPos0 > entry.middle0) ||
-                             (currPos0 == entry.middle0 && (invdir0 > 0)))
-                            << 0) |
-                        (
-                            ((currPos1 > entry.middle1) ||
-                             (currPos1 == entry.middle1 && (invdir1 > 0)))
-                            << 1) |
-                        (
-                            ((currPos2 > entry.middle2) ||
-                             (currPos2 == entry.middle2 && (invdir2 > 0)))
-                            << 2) |
-                        
-      0;
-      if (entry.indexed) {
-        size_t diffIndex = newIndex ^ entry.index;
-        if (diffIndex) {
-          entry.index = newIndex;
-          if (((entry.farEnd0 - currPos0) * invdir0 >
-                                 0) &&
-                  ((entry.farEnd1 - currPos1) * invdir1 >
-                                 0) &&
-                  ((entry.farEnd2 - currPos2) * invdir2 >
-                                 0) &&
-                  
-              true) {
-            stack[stackInd++] = entry;
-          }
-          size_t tmpIndex = newIndex;
-          StackEntry3 child;
-           if ((1 << 0) & diffIndex) {
-            makeChild3(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 0);
-          }
-           if ((1 << 1) & diffIndex) {
-            makeChild3(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 1);
-          }
-           if ((1 << 2) & diffIndex) {
-            makeChild3(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 2);
-          }
-          
-          continue;
-        }
-      }
-      entry.index = newIndex;
-      entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
-              
-          true) {
-        stack[stackInd++] = entry;
-      }
-      StackEntry3 child;
-      makeChild3(&entry, entry.index, &child);
-      stack[stackInd++] = child;
-    }
-  }
-  return false;
-}
 
 bool rayBBox3( float pos0, float invdir0,
                     float min0, float max0,  float pos1, float invdir1,
                     float min1, float max1,  float pos2, float invdir2,
                     float min2, float max2, 
-                    int unused) {
-  (void)unused;
+                    float *dist) {
   // maximum of the lower bounds
   float tminMax = 1e-8f;
   // minimum of the upper bounds
@@ -327,14 +86,143 @@ bool rayBBox3( float pos0, float invdir0,
   tminMax = fmax(tminMax, fmin(t02, t12));
   tmaxMin = fmin(tmaxMin, fmax(t02, t12));
   
+  *dist = tminMax;
   return tminMax < tmaxMin;
+}
+
+uint grey3(float f) {
+  uint part = (f * 128.0) + 128.0;
+  return 0xFF | (part << 8) | (part << 16) | (part << 24);
+}
+
+bool traverseObject3(__global uint *object,
+                            float pos0, float dir0,
+                           float invdir0,  float pos1, float dir1,
+                           float invdir1,  float pos2, float dir2,
+                           float invdir2, 
+                           __global uchar * img, __global float *dist,
+                           bool hasTerrain,  float scale0,
+                            float scale1,
+                            float scale2,
+                           
+                           __global float *gradVecs, uint numGradVecs,
+                           uint numOctaves, float persistence) {
+  __global float *fobject = (__global float *)object;
+   float origin0 = *fobject++;
+   float origin1 = *fobject++;
+   float origin2 = *fobject++;
+  
+  object = (__global uint *)fobject;
+   uint objDim0 = *object++;
+   uint objDim1 = *object++;
+   uint objDim2 = *object++;
+  
+  uint hashMapSize = *object++;
+  uint maxHash = hashMapSize * (3 + 1);
+
+  float currDist;
+  if (!rayBBox3( pos0, invdir0, origin0,
+                      origin0 + objDim0,  pos1, invdir1, origin1,
+                      origin1 + objDim1,  pos2, invdir2, origin2,
+                      origin2 + objDim2, 
+                      &currDist)) {
+    return false;
+  }
+
+  currDist += 1e-3;
+   float currPos0 = pos0 + currDist * dir0;
+  int currBlock0 = fastFloor(currPos0 - origin0);
+  int dirdir0 = 2 * (invdir0 > 0) - 1;
+   float currPos1 = pos1 + currDist * dir1;
+  int currBlock1 = fastFloor(currPos1 - origin1);
+  int dirdir1 = 2 * (invdir1 > 0) - 1;
+   float currPos2 = pos2 + currDist * dir2;
+  int currBlock2 = fastFloor(currPos2 - origin2);
+  int dirdir2 = 2 * (invdir2 > 0) - 1;
+  
+
+  if (get_global_id(0) == 400) {
+    //printf("%i\n", get_global_id(1));
+  }
+  while (true) {
+    // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
+    // currBlock0, currBlock1, currBlock2);
+    uint hashI =
+        (3 + 1) *
+        hash3( currBlock0,  currBlock1,  currBlock2,  0, hashMapSize);
+    uint result;
+    while (true) {
+      if (!(result = object[hashI + 3])) {
+        break;
+      }
+      if ( currBlock0 == object[hashI + 0] &&  currBlock1 == object[hashI + 1] &&  currBlock2 == object[hashI + 2] &&  true) {
+        break;
+      }
+      hashI += 3 + 1;
+      if (hashI >= maxHash) {
+        hashI = 0;
+      }
+    }
+    if (hasTerrain && !result) {
+      result = getNoise3(
+                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2, 
+                   gradVecs, numGradVecs, numOctaves, persistence) > 0
+                   ? grey3(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  0.0) / 3)
+                   : 0;
+    }
+    placeBehind(result, img);
+    if (*(img + 3) == 0xFF) {
+      break;
+    }
+    float dist = INFINITY;
+     dist =
+        fmin(dist, invdir0 * (currBlock0 + (invdir0 > 0) -
+                                (currPos0 - origin0)));
+     dist =
+        fmin(dist, invdir1 * (currBlock1 + (invdir1 > 0) -
+                                (currPos1 - origin1)));
+     dist =
+        fmin(dist, invdir2 * (currBlock2 + (invdir2 > 0) -
+                                (currPos2 - origin2)));
+    
+    dist = fmax(dist, 0);
+    currDist += dist + 1e-3;
+    int change;
+    uint changeMask = 0xFFFFFFFFU;
+     currPos0 = pos0 + currDist * dir0;
+    change = (fastFloor(currPos0 - origin0) - currBlock0) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock0 += change;
+    if (currBlock0 < 0 || currBlock0 >= (int)objDim0) {
+      break;
+    }
+     currPos1 = pos1 + currDist * dir1;
+    change = (fastFloor(currPos1 - origin1) - currBlock1) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock1 += change;
+    if (currBlock1 < 0 || currBlock1 >= (int)objDim1) {
+      break;
+    }
+     currPos2 = pos2 + currDist * dir2;
+    change = (fastFloor(currPos2 - origin2) - currBlock2) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock2 += change;
+    if (currBlock2 < 0 || currBlock2 >= (int)objDim2) {
+      break;
+    }
+    
+  }
+  return false;
 }
 
 bool traverseBVH3(__global uint *bvh,  float pos0,
                         float dir0, float invdir0,  float pos1,
                         float dir1, float invdir1,  float pos2,
                         float dir2, float invdir2, 
-                        __global uchar * img, __global float *dist) {
+                        __global uchar * img, __global float *dist,
+                         float scale0,  float scale1,  float scale2, 
+                        __global float *gradVecs, uint numGradVecs,
+                        uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[3];
@@ -346,6 +234,7 @@ bool traverseBVH3(__global uint *bvh,  float pos0,
   __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
+  float spam;
   while (stackInd) {
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
@@ -357,16 +246,19 @@ bool traverseBVH3(__global uint *bvh,  float pos0,
     float max2 = *floatBVH++;
     
     if (!rayBBox3(
-             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  0)) {
+             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  &spam)) {
       continue;
     }
     currBvh = (__global uint *)floatBVH;
-    if (*currBvh++) {
-      if (traverseOctree3(currBvh + *currBvh,  pos0,
-                                dir0, invdir0,  pos1,
-                                dir1, invdir1,  pos2,
-                                dir2, invdir2, 
-                                img, dist)) {
+    uint objType = *currBvh++;
+    if (objType) {
+      if (traverseObject3(
+              currBvh + *currBvh,  pos0, dir0, invdir0,
+               pos1, dir1, invdir1,
+               pos2, dir2, invdir2,
+              
+              img, dist, objType - 1,  scale0,  scale1,  scale2, 
+              gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -392,7 +284,9 @@ bool traverseBVH3(__global uint *bvh,  float pos0,
 __kernel void renderStd3(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
-                               __global float *dist) {
+                               __global float *dist, __global float *scale,
+                               __global float *gradVecs, uint numGradVecs,
+                               uint numOctaves, float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -430,26 +324,31 @@ __kernel void renderStd3(__global uint *bvh, __global float *pos,
   img += 4 * posIndex;
   dist += posIndex;
   traverseBVH3(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2, 
-                     img, dist);
+                     img, dist,  scale[0],  scale[1],  scale[2], 
+                     gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 #ifndef NON_REP_
 #define NON_REP_
 
-uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
-  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha,
+                        uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) *
+                                   (255 - frontAlpha) * (back & 0xFF) /
+                                   255.0f) /
+         combinedAlpha;
 }
 
 void placeBehind(uint color, __global uchar *img) {
   uchar frontAlpha = *(img + 3);
-  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  uchar combinedAlpha =
+      frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
   *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
-  img++;
-  *img = combinedAlpha;
+  *++img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -458,14 +357,14 @@ void placeBehind(uint color, __global uchar *img) {
 BVH format:
 
 float minmax[4][2];
-int isOctree;
+int objType;
 
-The struct is different for leaf nodes (nodes where isOctree). The rest of the
-struct for a leaf node is as follows:
+The struct is different for leaf nodes (nodes where objType > 0). The rest of
+the struct for a leaf node is as follows:
 
-int octree;
-This is the value of octreePtr - &octree, where octreePtr is a pointer to the
-octree.
+int obj;
+This is the value of objPtr - &obj, where objPtr is a pointer to the
+object.
 
 The rest of the struct for a non-leaf node is as follows:
 
@@ -483,306 +382,22 @@ each other. Along this axis, left must be on the left of right.
 
 
 
-Octree format:
-// TODO: IMPLEMENT ROTATED OCTREES
-
-Header:
+Object format:
+// TODO: IMPLEMENT ROTATED OBJECTS
 
 float origin[4];
-float sidelength;
-This is the sidelength of the root node.
-
-The root node is immediately after the header.
-
-Node:
-
-int isLeaf;
-If isLeaf, then the following immediately follows:
-
-int color;
-
-Otherwise, the following immediately follows:
-
-int children[2 ** 4];
-The index of the node with minimum coordinates is 0, while changing the 2 **
-IND bit would change only the coordinate on axis IND.
-
-Each value in children in equal to childPtr - children, where childPtr is a
-pointer to the corresponding node.
+uint objDims[4];
+uint hashMapSize;
+uint hashMap[hashMapSize][4 + 1];
 
 */
-typedef struct StackEntry4 {
-
-  bool indexed;
-  __global uint *node;
-  size_t index;
-   float middle0;
-  float farEnd0;
-   float middle1;
-  float farEnd1;
-   float middle2;
-  float farEnd2;
-   float middle3;
-  float farEnd3;
-  
-} StackEntry4;
-
-void makeChild4(const StackEntry4 *parent, size_t index,
-                      StackEntry4 *child) {
-  child->indexed = false;
-  child->node = parent->node + 1 + parent->node[index + 1];
-   child->middle0 =
-      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
-      (((index >> 0) & 1) ^ (parent->farEnd0 < parent->middle0)) *
-          (parent->farEnd0 - parent->middle0);
-  child->farEnd0 =
-      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
-   child->middle1 =
-      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
-      (((index >> 1) & 1) ^ (parent->farEnd1 < parent->middle1)) *
-          (parent->farEnd1 - parent->middle1);
-  child->farEnd1 =
-      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
-   child->middle2 =
-      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
-      (((index >> 2) & 1) ^ (parent->farEnd2 < parent->middle2)) *
-          (parent->farEnd2 - parent->middle2);
-  child->farEnd2 =
-      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
-   child->middle3 =
-      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
-      (((index >> 3) & 1) ^ (parent->farEnd3 < parent->middle3)) *
-          (parent->farEnd3 - parent->middle3);
-  child->farEnd3 =
-      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
-  
-}
-
-bool traverseOctree4(__global uint *octree,
-                            float pos0, float dir0,
-                           float invdir0,  float pos1, float dir1,
-                           float invdir1,  float pos2, float dir2,
-                           float invdir2,  float pos3, float dir3,
-                           float invdir3, 
-                           __global uchar * img, __global float *dist) {
-  __global float *header = (__global float *)octree;
-   float origin0 = *header++;
-   float origin1 = *header++;
-   float origin2 = *header++;
-   float origin3 = *header++;
-  
-  float sidelength = *header++;
-  octree = (__global uint *)header;
-
-  float tminMax = 1e-8f;
-  float tmaxMin = FLT_MAX;
-   float t00 = (origin0 - pos0) * invdir0;
-  float t10 = (origin0 + sidelength - pos0) * invdir0;
-  tminMax = fmax(tminMax, fmin(t00, t10));
-  tmaxMin = fmin(tmaxMin, fmax(t00, t10));
-   float t01 = (origin1 - pos1) * invdir1;
-  float t11 = (origin1 + sidelength - pos1) * invdir1;
-  tminMax = fmax(tminMax, fmin(t01, t11));
-  tmaxMin = fmin(tmaxMin, fmax(t01, t11));
-   float t02 = (origin2 - pos2) * invdir2;
-  float t12 = (origin2 + sidelength - pos2) * invdir2;
-  tminMax = fmax(tminMax, fmin(t02, t12));
-  tmaxMin = fmin(tmaxMin, fmax(t02, t12));
-   float t03 = (origin3 - pos3) * invdir3;
-  float t13 = (origin3 + sidelength - pos3) * invdir3;
-  tminMax = fmax(tminMax, fmin(t03, t13));
-  tmaxMin = fmin(tmaxMin, fmax(t03, t13));
-  
-  if (tminMax >= tmaxMin) {
-    return false;
-  }
-
-  float currDist = tminMax + 1e-3f;
-   float currPos0 = pos0 + currDist * dir0;
-   float currPos1 = pos1 + currDist * dir1;
-   float currPos2 = pos2 + currDist * dir2;
-   float currPos3 = pos3 + currDist * dir3;
-  
-
-  StackEntry4 stack[12];
-  size_t stackInd = 0;
-  StackEntry4 baseEntry;
-  baseEntry.indexed = false;
-  baseEntry.node = octree;
-   baseEntry.middle0 = origin0 + sidelength / 2;
-  baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
-   baseEntry.middle1 = origin1 + sidelength / 2;
-  baseEntry.farEnd1 = origin1 + (invdir1 > 0) * sidelength;
-   baseEntry.middle2 = origin2 + sidelength / 2;
-  baseEntry.farEnd2 = origin2 + (invdir2 > 0) * sidelength;
-   baseEntry.middle3 = origin3 + sidelength / 2;
-  baseEntry.farEnd3 = origin3 + (invdir3 > 0) * sidelength;
-  
-  stack[stackInd++] = baseEntry;
-  bool debug = true;
-  __global float *distp = dist;
-  size_t i = 0;
-  while (stackInd && i < 100) {
-    i++;
-    StackEntry4 entry = stack[--stackInd];
-    /*
-    if (debug) {
-      printf("currDist: %f, entry.indexed: %i, entry.index: %lu\n", currDist,
-             (int)entry.indexed, entry.index);
-       printf(
-          "currPos0: %f, entry.middle0: %f, entry.farEnd0: %f\n",
-          currPos0, entry.middle0, entry.farEnd0);
-       printf(
-          "currPos1: %f, entry.middle1: %f, entry.farEnd1: %f\n",
-          currPos1, entry.middle1, entry.farEnd1);
-       printf(
-          "currPos2: %f, entry.middle2: %f, entry.farEnd2: %f\n",
-          currPos2, entry.middle2, entry.farEnd2);
-       printf(
-          "currPos3: %f, entry.middle3: %f, entry.farEnd3: %f\n",
-          currPos3, entry.middle3, entry.farEnd3);
-      
-      if (*entry.node) {
-        printf("Leaf node\n");
-      } else {
-        printf("\n");
-      }
-    }
-    */
-    /*
-    *distp++ = currDist;
-     *distp++ = currPos0;
-    *distp++ = invdir0;
-    *distp++ = entry.middle0;
-    *distp++ = entry.farEnd0;
-     *distp++ = currPos1;
-    *distp++ = invdir1;
-    *distp++ = entry.middle1;
-    *distp++ = entry.farEnd1;
-     *distp++ = currPos2;
-    *distp++ = invdir2;
-    *distp++ = entry.middle2;
-    *distp++ = entry.farEnd2;
-     *distp++ = currPos3;
-    *distp++ = invdir3;
-    *distp++ = entry.middle3;
-    *distp++ = entry.farEnd3;
-    
-    *distp++ = *entry.node;
-    *distp++ = stackInd;
-    */
-    if (*entry.node) {
-      // this is a leaf node
-      placeBehind(*(entry.node + 1), img);
-      if (*(img + 3) == 0xFF) {
-        *dist = currDist;
-        return true;
-      }
-      float minStep = FLT_MAX;
-       minStep =
-          fmin(minStep, (entry.farEnd0 - currPos0) * invdir0);
-       minStep =
-          fmin(minStep, (entry.farEnd1 - currPos1) * invdir1);
-       minStep =
-          fmin(minStep, (entry.farEnd2 - currPos2) * invdir2);
-       minStep =
-          fmin(minStep, (entry.farEnd3 - currPos3) * invdir3);
-      
-      if (minStep <= -1e-3f) {
-        continue;
-      }
-      currDist += minStep + 1e-3f;
-       currPos0 = pos0 + currDist * dir0;
-       currPos1 = pos1 + currDist * dir1;
-       currPos2 = pos2 + currDist * dir2;
-       currPos3 = pos3 + currDist * dir3;
-      
-    } else {
-      size_t newIndex = (
-                            ((currPos0 > entry.middle0) ||
-                             (currPos0 == entry.middle0 && (invdir0 > 0)))
-                            << 0) |
-                        (
-                            ((currPos1 > entry.middle1) ||
-                             (currPos1 == entry.middle1 && (invdir1 > 0)))
-                            << 1) |
-                        (
-                            ((currPos2 > entry.middle2) ||
-                             (currPos2 == entry.middle2 && (invdir2 > 0)))
-                            << 2) |
-                        (
-                            ((currPos3 > entry.middle3) ||
-                             (currPos3 == entry.middle3 && (invdir3 > 0)))
-                            << 3) |
-                        
-      0;
-      if (entry.indexed) {
-        size_t diffIndex = newIndex ^ entry.index;
-        if (diffIndex) {
-          entry.index = newIndex;
-          if (((entry.farEnd0 - currPos0) * invdir0 >
-                                 0) &&
-                  ((entry.farEnd1 - currPos1) * invdir1 >
-                                 0) &&
-                  ((entry.farEnd2 - currPos2) * invdir2 >
-                                 0) &&
-                  ((entry.farEnd3 - currPos3) * invdir3 >
-                                 0) &&
-                  
-              true) {
-            stack[stackInd++] = entry;
-          }
-          size_t tmpIndex = newIndex;
-          StackEntry4 child;
-           if ((1 << 0) & diffIndex) {
-            makeChild4(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 0);
-          }
-           if ((1 << 1) & diffIndex) {
-            makeChild4(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 1);
-          }
-           if ((1 << 2) & diffIndex) {
-            makeChild4(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 2);
-          }
-           if ((1 << 3) & diffIndex) {
-            makeChild4(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 3);
-          }
-          
-          continue;
-        }
-      }
-      entry.index = newIndex;
-      entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
-              
-          true) {
-        stack[stackInd++] = entry;
-      }
-      StackEntry4 child;
-      makeChild4(&entry, entry.index, &child);
-      stack[stackInd++] = child;
-    }
-  }
-  return false;
-}
 
 bool rayBBox4( float pos0, float invdir0,
                     float min0, float max0,  float pos1, float invdir1,
                     float min1, float max1,  float pos2, float invdir2,
                     float min2, float max2,  float pos3, float invdir3,
                     float min3, float max3, 
-                    int unused) {
-  (void)unused;
+                    float *dist) {
   // maximum of the lower bounds
   float tminMax = 1e-8f;
   // minimum of the upper bounds
@@ -804,7 +419,151 @@ bool rayBBox4( float pos0, float invdir0,
   tminMax = fmax(tminMax, fmin(t03, t13));
   tmaxMin = fmin(tmaxMin, fmax(t03, t13));
   
+  *dist = tminMax;
   return tminMax < tmaxMin;
+}
+
+uint grey4(float f) {
+  uint part = (f * 128.0) + 128.0;
+  return 0xFF | (part << 8) | (part << 16) | (part << 24);
+}
+
+bool traverseObject4(__global uint *object,
+                            float pos0, float dir0,
+                           float invdir0,  float pos1, float dir1,
+                           float invdir1,  float pos2, float dir2,
+                           float invdir2,  float pos3, float dir3,
+                           float invdir3, 
+                           __global uchar * img, __global float *dist,
+                           bool hasTerrain,  float scale0,
+                            float scale1,
+                            float scale2,
+                            float scale3,
+                           
+                           __global float *gradVecs, uint numGradVecs,
+                           uint numOctaves, float persistence) {
+  __global float *fobject = (__global float *)object;
+   float origin0 = *fobject++;
+   float origin1 = *fobject++;
+   float origin2 = *fobject++;
+   float origin3 = *fobject++;
+  
+  object = (__global uint *)fobject;
+   uint objDim0 = *object++;
+   uint objDim1 = *object++;
+   uint objDim2 = *object++;
+   uint objDim3 = *object++;
+  
+  uint hashMapSize = *object++;
+  uint maxHash = hashMapSize * (4 + 1);
+
+  float currDist;
+  if (!rayBBox4( pos0, invdir0, origin0,
+                      origin0 + objDim0,  pos1, invdir1, origin1,
+                      origin1 + objDim1,  pos2, invdir2, origin2,
+                      origin2 + objDim2,  pos3, invdir3, origin3,
+                      origin3 + objDim3, 
+                      &currDist)) {
+    return false;
+  }
+
+  currDist += 1e-3;
+   float currPos0 = pos0 + currDist * dir0;
+  int currBlock0 = fastFloor(currPos0 - origin0);
+  int dirdir0 = 2 * (invdir0 > 0) - 1;
+   float currPos1 = pos1 + currDist * dir1;
+  int currBlock1 = fastFloor(currPos1 - origin1);
+  int dirdir1 = 2 * (invdir1 > 0) - 1;
+   float currPos2 = pos2 + currDist * dir2;
+  int currBlock2 = fastFloor(currPos2 - origin2);
+  int dirdir2 = 2 * (invdir2 > 0) - 1;
+   float currPos3 = pos3 + currDist * dir3;
+  int currBlock3 = fastFloor(currPos3 - origin3);
+  int dirdir3 = 2 * (invdir3 > 0) - 1;
+  
+
+  if (get_global_id(0) == 400) {
+    //printf("%i\n", get_global_id(1));
+  }
+  while (true) {
+    // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
+    // currBlock0, currBlock1, currBlock2);
+    uint hashI =
+        (4 + 1) *
+        hash4( currBlock0,  currBlock1,  currBlock2,  currBlock3,  0, hashMapSize);
+    uint result;
+    while (true) {
+      if (!(result = object[hashI + 4])) {
+        break;
+      }
+      if ( currBlock0 == object[hashI + 0] &&  currBlock1 == object[hashI + 1] &&  currBlock2 == object[hashI + 2] &&  currBlock3 == object[hashI + 3] &&  true) {
+        break;
+      }
+      hashI += 4 + 1;
+      if (hashI >= maxHash) {
+        hashI = 0;
+      }
+    }
+    if (hasTerrain && !result) {
+      result = getNoise4(
+                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2,  scale3, origin3 + currBlock3, 
+                   gradVecs, numGradVecs, numOctaves, persistence) > 0
+                   ? grey4(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  currPos3 - origin3 - currBlock3 +  0.0) / 4)
+                   : 0;
+    }
+    placeBehind(result, img);
+    if (*(img + 3) == 0xFF) {
+      break;
+    }
+    float dist = INFINITY;
+     dist =
+        fmin(dist, invdir0 * (currBlock0 + (invdir0 > 0) -
+                                (currPos0 - origin0)));
+     dist =
+        fmin(dist, invdir1 * (currBlock1 + (invdir1 > 0) -
+                                (currPos1 - origin1)));
+     dist =
+        fmin(dist, invdir2 * (currBlock2 + (invdir2 > 0) -
+                                (currPos2 - origin2)));
+     dist =
+        fmin(dist, invdir3 * (currBlock3 + (invdir3 > 0) -
+                                (currPos3 - origin3)));
+    
+    dist = fmax(dist, 0);
+    currDist += dist + 1e-3;
+    int change;
+    uint changeMask = 0xFFFFFFFFU;
+     currPos0 = pos0 + currDist * dir0;
+    change = (fastFloor(currPos0 - origin0) - currBlock0) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock0 += change;
+    if (currBlock0 < 0 || currBlock0 >= (int)objDim0) {
+      break;
+    }
+     currPos1 = pos1 + currDist * dir1;
+    change = (fastFloor(currPos1 - origin1) - currBlock1) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock1 += change;
+    if (currBlock1 < 0 || currBlock1 >= (int)objDim1) {
+      break;
+    }
+     currPos2 = pos2 + currDist * dir2;
+    change = (fastFloor(currPos2 - origin2) - currBlock2) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock2 += change;
+    if (currBlock2 < 0 || currBlock2 >= (int)objDim2) {
+      break;
+    }
+     currPos3 = pos3 + currDist * dir3;
+    change = (fastFloor(currPos3 - origin3) - currBlock3) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock3 += change;
+    if (currBlock3 < 0 || currBlock3 >= (int)objDim3) {
+      break;
+    }
+    
+  }
+  return false;
 }
 
 bool traverseBVH4(__global uint *bvh,  float pos0,
@@ -812,7 +571,10 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
                         float dir1, float invdir1,  float pos2,
                         float dir2, float invdir2,  float pos3,
                         float dir3, float invdir3, 
-                        __global uchar * img, __global float *dist) {
+                        __global uchar * img, __global float *dist,
+                         float scale0,  float scale1,  float scale2,  float scale3, 
+                        __global float *gradVecs, uint numGradVecs,
+                        uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[4];
@@ -825,6 +587,7 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
   __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
+  float spam;
   while (stackInd) {
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
@@ -838,17 +601,20 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
     float max3 = *floatBVH++;
     
     if (!rayBBox4(
-             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  0)) {
+             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  &spam)) {
       continue;
     }
     currBvh = (__global uint *)floatBVH;
-    if (*currBvh++) {
-      if (traverseOctree4(currBvh + *currBvh,  pos0,
-                                dir0, invdir0,  pos1,
-                                dir1, invdir1,  pos2,
-                                dir2, invdir2,  pos3,
-                                dir3, invdir3, 
-                                img, dist)) {
+    uint objType = *currBvh++;
+    if (objType) {
+      if (traverseObject4(
+              currBvh + *currBvh,  pos0, dir0, invdir0,
+               pos1, dir1, invdir1,
+               pos2, dir2, invdir2,
+               pos3, dir3, invdir3,
+              
+              img, dist, objType - 1,  scale0,  scale1,  scale2,  scale3, 
+              gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -874,7 +640,9 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
 __kernel void renderStd4(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
-                               __global float *dist) {
+                               __global float *dist, __global float *scale,
+                               __global float *gradVecs, uint numGradVecs,
+                               uint numOctaves, float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -917,26 +685,31 @@ __kernel void renderStd4(__global uint *bvh, __global float *pos,
   img += 4 * posIndex;
   dist += posIndex;
   traverseBVH4(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3, 
-                     img, dist);
+                     img, dist,  scale[0],  scale[1],  scale[2],  scale[3], 
+                     gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 #ifndef NON_REP_
 #define NON_REP_
 
-uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
-  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha,
+                        uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) *
+                                   (255 - frontAlpha) * (back & 0xFF) /
+                                   255.0f) /
+         combinedAlpha;
 }
 
 void placeBehind(uint color, __global uchar *img) {
   uchar frontAlpha = *(img + 3);
-  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  uchar combinedAlpha =
+      frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
   *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
-  img++;
-  *img = combinedAlpha;
+  *++img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -945,14 +718,14 @@ void placeBehind(uint color, __global uchar *img) {
 BVH format:
 
 float minmax[5][2];
-int isOctree;
+int objType;
 
-The struct is different for leaf nodes (nodes where isOctree). The rest of the
-struct for a leaf node is as follows:
+The struct is different for leaf nodes (nodes where objType > 0). The rest of
+the struct for a leaf node is as follows:
 
-int octree;
-This is the value of octreePtr - &octree, where octreePtr is a pointer to the
-octree.
+int obj;
+This is the value of objPtr - &obj, where objPtr is a pointer to the
+object.
 
 The rest of the struct for a non-leaf node is as follows:
 
@@ -970,337 +743,15 @@ each other. Along this axis, left must be on the left of right.
 
 
 
-Octree format:
-// TODO: IMPLEMENT ROTATED OCTREES
-
-Header:
+Object format:
+// TODO: IMPLEMENT ROTATED OBJECTS
 
 float origin[5];
-float sidelength;
-This is the sidelength of the root node.
-
-The root node is immediately after the header.
-
-Node:
-
-int isLeaf;
-If isLeaf, then the following immediately follows:
-
-int color;
-
-Otherwise, the following immediately follows:
-
-int children[2 ** 5];
-The index of the node with minimum coordinates is 0, while changing the 2 **
-IND bit would change only the coordinate on axis IND.
-
-Each value in children in equal to childPtr - children, where childPtr is a
-pointer to the corresponding node.
+uint objDims[5];
+uint hashMapSize;
+uint hashMap[hashMapSize][5 + 1];
 
 */
-typedef struct StackEntry5 {
-
-  bool indexed;
-  __global uint *node;
-  size_t index;
-   float middle0;
-  float farEnd0;
-   float middle1;
-  float farEnd1;
-   float middle2;
-  float farEnd2;
-   float middle3;
-  float farEnd3;
-   float middle4;
-  float farEnd4;
-  
-} StackEntry5;
-
-void makeChild5(const StackEntry5 *parent, size_t index,
-                      StackEntry5 *child) {
-  child->indexed = false;
-  child->node = parent->node + 1 + parent->node[index + 1];
-   child->middle0 =
-      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
-      (((index >> 0) & 1) ^ (parent->farEnd0 < parent->middle0)) *
-          (parent->farEnd0 - parent->middle0);
-  child->farEnd0 =
-      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
-   child->middle1 =
-      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
-      (((index >> 1) & 1) ^ (parent->farEnd1 < parent->middle1)) *
-          (parent->farEnd1 - parent->middle1);
-  child->farEnd1 =
-      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
-   child->middle2 =
-      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
-      (((index >> 2) & 1) ^ (parent->farEnd2 < parent->middle2)) *
-          (parent->farEnd2 - parent->middle2);
-  child->farEnd2 =
-      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
-   child->middle3 =
-      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
-      (((index >> 3) & 1) ^ (parent->farEnd3 < parent->middle3)) *
-          (parent->farEnd3 - parent->middle3);
-  child->farEnd3 =
-      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
-   child->middle4 =
-      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
-      (((index >> 4) & 1) ^ (parent->farEnd4 < parent->middle4)) *
-          (parent->farEnd4 - parent->middle4);
-  child->farEnd4 =
-      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
-  
-}
-
-bool traverseOctree5(__global uint *octree,
-                            float pos0, float dir0,
-                           float invdir0,  float pos1, float dir1,
-                           float invdir1,  float pos2, float dir2,
-                           float invdir2,  float pos3, float dir3,
-                           float invdir3,  float pos4, float dir4,
-                           float invdir4, 
-                           __global uchar * img, __global float *dist) {
-  __global float *header = (__global float *)octree;
-   float origin0 = *header++;
-   float origin1 = *header++;
-   float origin2 = *header++;
-   float origin3 = *header++;
-   float origin4 = *header++;
-  
-  float sidelength = *header++;
-  octree = (__global uint *)header;
-
-  float tminMax = 1e-8f;
-  float tmaxMin = FLT_MAX;
-   float t00 = (origin0 - pos0) * invdir0;
-  float t10 = (origin0 + sidelength - pos0) * invdir0;
-  tminMax = fmax(tminMax, fmin(t00, t10));
-  tmaxMin = fmin(tmaxMin, fmax(t00, t10));
-   float t01 = (origin1 - pos1) * invdir1;
-  float t11 = (origin1 + sidelength - pos1) * invdir1;
-  tminMax = fmax(tminMax, fmin(t01, t11));
-  tmaxMin = fmin(tmaxMin, fmax(t01, t11));
-   float t02 = (origin2 - pos2) * invdir2;
-  float t12 = (origin2 + sidelength - pos2) * invdir2;
-  tminMax = fmax(tminMax, fmin(t02, t12));
-  tmaxMin = fmin(tmaxMin, fmax(t02, t12));
-   float t03 = (origin3 - pos3) * invdir3;
-  float t13 = (origin3 + sidelength - pos3) * invdir3;
-  tminMax = fmax(tminMax, fmin(t03, t13));
-  tmaxMin = fmin(tmaxMin, fmax(t03, t13));
-   float t04 = (origin4 - pos4) * invdir4;
-  float t14 = (origin4 + sidelength - pos4) * invdir4;
-  tminMax = fmax(tminMax, fmin(t04, t14));
-  tmaxMin = fmin(tmaxMin, fmax(t04, t14));
-  
-  if (tminMax >= tmaxMin) {
-    return false;
-  }
-
-  float currDist = tminMax + 1e-3f;
-   float currPos0 = pos0 + currDist * dir0;
-   float currPos1 = pos1 + currDist * dir1;
-   float currPos2 = pos2 + currDist * dir2;
-   float currPos3 = pos3 + currDist * dir3;
-   float currPos4 = pos4 + currDist * dir4;
-  
-
-  StackEntry5 stack[12];
-  size_t stackInd = 0;
-  StackEntry5 baseEntry;
-  baseEntry.indexed = false;
-  baseEntry.node = octree;
-   baseEntry.middle0 = origin0 + sidelength / 2;
-  baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
-   baseEntry.middle1 = origin1 + sidelength / 2;
-  baseEntry.farEnd1 = origin1 + (invdir1 > 0) * sidelength;
-   baseEntry.middle2 = origin2 + sidelength / 2;
-  baseEntry.farEnd2 = origin2 + (invdir2 > 0) * sidelength;
-   baseEntry.middle3 = origin3 + sidelength / 2;
-  baseEntry.farEnd3 = origin3 + (invdir3 > 0) * sidelength;
-   baseEntry.middle4 = origin4 + sidelength / 2;
-  baseEntry.farEnd4 = origin4 + (invdir4 > 0) * sidelength;
-  
-  stack[stackInd++] = baseEntry;
-  bool debug = true;
-  __global float *distp = dist;
-  size_t i = 0;
-  while (stackInd && i < 100) {
-    i++;
-    StackEntry5 entry = stack[--stackInd];
-    /*
-    if (debug) {
-      printf("currDist: %f, entry.indexed: %i, entry.index: %lu\n", currDist,
-             (int)entry.indexed, entry.index);
-       printf(
-          "currPos0: %f, entry.middle0: %f, entry.farEnd0: %f\n",
-          currPos0, entry.middle0, entry.farEnd0);
-       printf(
-          "currPos1: %f, entry.middle1: %f, entry.farEnd1: %f\n",
-          currPos1, entry.middle1, entry.farEnd1);
-       printf(
-          "currPos2: %f, entry.middle2: %f, entry.farEnd2: %f\n",
-          currPos2, entry.middle2, entry.farEnd2);
-       printf(
-          "currPos3: %f, entry.middle3: %f, entry.farEnd3: %f\n",
-          currPos3, entry.middle3, entry.farEnd3);
-       printf(
-          "currPos4: %f, entry.middle4: %f, entry.farEnd4: %f\n",
-          currPos4, entry.middle4, entry.farEnd4);
-      
-      if (*entry.node) {
-        printf("Leaf node\n");
-      } else {
-        printf("\n");
-      }
-    }
-    */
-    /*
-    *distp++ = currDist;
-     *distp++ = currPos0;
-    *distp++ = invdir0;
-    *distp++ = entry.middle0;
-    *distp++ = entry.farEnd0;
-     *distp++ = currPos1;
-    *distp++ = invdir1;
-    *distp++ = entry.middle1;
-    *distp++ = entry.farEnd1;
-     *distp++ = currPos2;
-    *distp++ = invdir2;
-    *distp++ = entry.middle2;
-    *distp++ = entry.farEnd2;
-     *distp++ = currPos3;
-    *distp++ = invdir3;
-    *distp++ = entry.middle3;
-    *distp++ = entry.farEnd3;
-     *distp++ = currPos4;
-    *distp++ = invdir4;
-    *distp++ = entry.middle4;
-    *distp++ = entry.farEnd4;
-    
-    *distp++ = *entry.node;
-    *distp++ = stackInd;
-    */
-    if (*entry.node) {
-      // this is a leaf node
-      placeBehind(*(entry.node + 1), img);
-      if (*(img + 3) == 0xFF) {
-        *dist = currDist;
-        return true;
-      }
-      float minStep = FLT_MAX;
-       minStep =
-          fmin(minStep, (entry.farEnd0 - currPos0) * invdir0);
-       minStep =
-          fmin(minStep, (entry.farEnd1 - currPos1) * invdir1);
-       minStep =
-          fmin(minStep, (entry.farEnd2 - currPos2) * invdir2);
-       minStep =
-          fmin(minStep, (entry.farEnd3 - currPos3) * invdir3);
-       minStep =
-          fmin(minStep, (entry.farEnd4 - currPos4) * invdir4);
-      
-      if (minStep <= -1e-3f) {
-        continue;
-      }
-      currDist += minStep + 1e-3f;
-       currPos0 = pos0 + currDist * dir0;
-       currPos1 = pos1 + currDist * dir1;
-       currPos2 = pos2 + currDist * dir2;
-       currPos3 = pos3 + currDist * dir3;
-       currPos4 = pos4 + currDist * dir4;
-      
-    } else {
-      size_t newIndex = (
-                            ((currPos0 > entry.middle0) ||
-                             (currPos0 == entry.middle0 && (invdir0 > 0)))
-                            << 0) |
-                        (
-                            ((currPos1 > entry.middle1) ||
-                             (currPos1 == entry.middle1 && (invdir1 > 0)))
-                            << 1) |
-                        (
-                            ((currPos2 > entry.middle2) ||
-                             (currPos2 == entry.middle2 && (invdir2 > 0)))
-                            << 2) |
-                        (
-                            ((currPos3 > entry.middle3) ||
-                             (currPos3 == entry.middle3 && (invdir3 > 0)))
-                            << 3) |
-                        (
-                            ((currPos4 > entry.middle4) ||
-                             (currPos4 == entry.middle4 && (invdir4 > 0)))
-                            << 4) |
-                        
-      0;
-      if (entry.indexed) {
-        size_t diffIndex = newIndex ^ entry.index;
-        if (diffIndex) {
-          entry.index = newIndex;
-          if (((entry.farEnd0 - currPos0) * invdir0 >
-                                 0) &&
-                  ((entry.farEnd1 - currPos1) * invdir1 >
-                                 0) &&
-                  ((entry.farEnd2 - currPos2) * invdir2 >
-                                 0) &&
-                  ((entry.farEnd3 - currPos3) * invdir3 >
-                                 0) &&
-                  ((entry.farEnd4 - currPos4) * invdir4 >
-                                 0) &&
-                  
-              true) {
-            stack[stackInd++] = entry;
-          }
-          size_t tmpIndex = newIndex;
-          StackEntry5 child;
-           if ((1 << 0) & diffIndex) {
-            makeChild5(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 0);
-          }
-           if ((1 << 1) & diffIndex) {
-            makeChild5(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 1);
-          }
-           if ((1 << 2) & diffIndex) {
-            makeChild5(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 2);
-          }
-           if ((1 << 3) & diffIndex) {
-            makeChild5(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 3);
-          }
-           if ((1 << 4) & diffIndex) {
-            makeChild5(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 4);
-          }
-          
-          continue;
-        }
-      }
-      entry.index = newIndex;
-      entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
-              
-          true) {
-        stack[stackInd++] = entry;
-      }
-      StackEntry5 child;
-      makeChild5(&entry, entry.index, &child);
-      stack[stackInd++] = child;
-    }
-  }
-  return false;
-}
 
 bool rayBBox5( float pos0, float invdir0,
                     float min0, float max0,  float pos1, float invdir1,
@@ -1308,8 +759,7 @@ bool rayBBox5( float pos0, float invdir0,
                     float min2, float max2,  float pos3, float invdir3,
                     float min3, float max3,  float pos4, float invdir4,
                     float min4, float max4, 
-                    int unused) {
-  (void)unused;
+                    float *dist) {
   // maximum of the lower bounds
   float tminMax = 1e-8f;
   // minimum of the upper bounds
@@ -1335,7 +785,169 @@ bool rayBBox5( float pos0, float invdir0,
   tminMax = fmax(tminMax, fmin(t04, t14));
   tmaxMin = fmin(tmaxMin, fmax(t04, t14));
   
+  *dist = tminMax;
   return tminMax < tmaxMin;
+}
+
+uint grey5(float f) {
+  uint part = (f * 128.0) + 128.0;
+  return 0xFF | (part << 8) | (part << 16) | (part << 24);
+}
+
+bool traverseObject5(__global uint *object,
+                            float pos0, float dir0,
+                           float invdir0,  float pos1, float dir1,
+                           float invdir1,  float pos2, float dir2,
+                           float invdir2,  float pos3, float dir3,
+                           float invdir3,  float pos4, float dir4,
+                           float invdir4, 
+                           __global uchar * img, __global float *dist,
+                           bool hasTerrain,  float scale0,
+                            float scale1,
+                            float scale2,
+                            float scale3,
+                            float scale4,
+                           
+                           __global float *gradVecs, uint numGradVecs,
+                           uint numOctaves, float persistence) {
+  __global float *fobject = (__global float *)object;
+   float origin0 = *fobject++;
+   float origin1 = *fobject++;
+   float origin2 = *fobject++;
+   float origin3 = *fobject++;
+   float origin4 = *fobject++;
+  
+  object = (__global uint *)fobject;
+   uint objDim0 = *object++;
+   uint objDim1 = *object++;
+   uint objDim2 = *object++;
+   uint objDim3 = *object++;
+   uint objDim4 = *object++;
+  
+  uint hashMapSize = *object++;
+  uint maxHash = hashMapSize * (5 + 1);
+
+  float currDist;
+  if (!rayBBox5( pos0, invdir0, origin0,
+                      origin0 + objDim0,  pos1, invdir1, origin1,
+                      origin1 + objDim1,  pos2, invdir2, origin2,
+                      origin2 + objDim2,  pos3, invdir3, origin3,
+                      origin3 + objDim3,  pos4, invdir4, origin4,
+                      origin4 + objDim4, 
+                      &currDist)) {
+    return false;
+  }
+
+  currDist += 1e-3;
+   float currPos0 = pos0 + currDist * dir0;
+  int currBlock0 = fastFloor(currPos0 - origin0);
+  int dirdir0 = 2 * (invdir0 > 0) - 1;
+   float currPos1 = pos1 + currDist * dir1;
+  int currBlock1 = fastFloor(currPos1 - origin1);
+  int dirdir1 = 2 * (invdir1 > 0) - 1;
+   float currPos2 = pos2 + currDist * dir2;
+  int currBlock2 = fastFloor(currPos2 - origin2);
+  int dirdir2 = 2 * (invdir2 > 0) - 1;
+   float currPos3 = pos3 + currDist * dir3;
+  int currBlock3 = fastFloor(currPos3 - origin3);
+  int dirdir3 = 2 * (invdir3 > 0) - 1;
+   float currPos4 = pos4 + currDist * dir4;
+  int currBlock4 = fastFloor(currPos4 - origin4);
+  int dirdir4 = 2 * (invdir4 > 0) - 1;
+  
+
+  if (get_global_id(0) == 400) {
+    //printf("%i\n", get_global_id(1));
+  }
+  while (true) {
+    // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
+    // currBlock0, currBlock1, currBlock2);
+    uint hashI =
+        (5 + 1) *
+        hash5( currBlock0,  currBlock1,  currBlock2,  currBlock3,  currBlock4,  0, hashMapSize);
+    uint result;
+    while (true) {
+      if (!(result = object[hashI + 5])) {
+        break;
+      }
+      if ( currBlock0 == object[hashI + 0] &&  currBlock1 == object[hashI + 1] &&  currBlock2 == object[hashI + 2] &&  currBlock3 == object[hashI + 3] &&  currBlock4 == object[hashI + 4] &&  true) {
+        break;
+      }
+      hashI += 5 + 1;
+      if (hashI >= maxHash) {
+        hashI = 0;
+      }
+    }
+    if (hasTerrain && !result) {
+      result = getNoise5(
+                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2,  scale3, origin3 + currBlock3,  scale4, origin4 + currBlock4, 
+                   gradVecs, numGradVecs, numOctaves, persistence) > 0
+                   ? grey5(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  currPos3 - origin3 - currBlock3 +  currPos4 - origin4 - currBlock4 +  0.0) / 5)
+                   : 0;
+    }
+    placeBehind(result, img);
+    if (*(img + 3) == 0xFF) {
+      break;
+    }
+    float dist = INFINITY;
+     dist =
+        fmin(dist, invdir0 * (currBlock0 + (invdir0 > 0) -
+                                (currPos0 - origin0)));
+     dist =
+        fmin(dist, invdir1 * (currBlock1 + (invdir1 > 0) -
+                                (currPos1 - origin1)));
+     dist =
+        fmin(dist, invdir2 * (currBlock2 + (invdir2 > 0) -
+                                (currPos2 - origin2)));
+     dist =
+        fmin(dist, invdir3 * (currBlock3 + (invdir3 > 0) -
+                                (currPos3 - origin3)));
+     dist =
+        fmin(dist, invdir4 * (currBlock4 + (invdir4 > 0) -
+                                (currPos4 - origin4)));
+    
+    dist = fmax(dist, 0);
+    currDist += dist + 1e-3;
+    int change;
+    uint changeMask = 0xFFFFFFFFU;
+     currPos0 = pos0 + currDist * dir0;
+    change = (fastFloor(currPos0 - origin0) - currBlock0) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock0 += change;
+    if (currBlock0 < 0 || currBlock0 >= (int)objDim0) {
+      break;
+    }
+     currPos1 = pos1 + currDist * dir1;
+    change = (fastFloor(currPos1 - origin1) - currBlock1) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock1 += change;
+    if (currBlock1 < 0 || currBlock1 >= (int)objDim1) {
+      break;
+    }
+     currPos2 = pos2 + currDist * dir2;
+    change = (fastFloor(currPos2 - origin2) - currBlock2) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock2 += change;
+    if (currBlock2 < 0 || currBlock2 >= (int)objDim2) {
+      break;
+    }
+     currPos3 = pos3 + currDist * dir3;
+    change = (fastFloor(currPos3 - origin3) - currBlock3) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock3 += change;
+    if (currBlock3 < 0 || currBlock3 >= (int)objDim3) {
+      break;
+    }
+     currPos4 = pos4 + currDist * dir4;
+    change = (fastFloor(currPos4 - origin4) - currBlock4) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock4 += change;
+    if (currBlock4 < 0 || currBlock4 >= (int)objDim4) {
+      break;
+    }
+    
+  }
+  return false;
 }
 
 bool traverseBVH5(__global uint *bvh,  float pos0,
@@ -1344,7 +956,10 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
                         float dir2, float invdir2,  float pos3,
                         float dir3, float invdir3,  float pos4,
                         float dir4, float invdir4, 
-                        __global uchar * img, __global float *dist) {
+                        __global uchar * img, __global float *dist,
+                         float scale0,  float scale1,  float scale2,  float scale3,  float scale4, 
+                        __global float *gradVecs, uint numGradVecs,
+                        uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[5];
@@ -1358,6 +973,7 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
   __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
+  float spam;
   while (stackInd) {
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
@@ -1373,18 +989,21 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
     float max4 = *floatBVH++;
     
     if (!rayBBox5(
-             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  0)) {
+             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  &spam)) {
       continue;
     }
     currBvh = (__global uint *)floatBVH;
-    if (*currBvh++) {
-      if (traverseOctree5(currBvh + *currBvh,  pos0,
-                                dir0, invdir0,  pos1,
-                                dir1, invdir1,  pos2,
-                                dir2, invdir2,  pos3,
-                                dir3, invdir3,  pos4,
-                                dir4, invdir4, 
-                                img, dist)) {
+    uint objType = *currBvh++;
+    if (objType) {
+      if (traverseObject5(
+              currBvh + *currBvh,  pos0, dir0, invdir0,
+               pos1, dir1, invdir1,
+               pos2, dir2, invdir2,
+               pos3, dir3, invdir3,
+               pos4, dir4, invdir4,
+              
+              img, dist, objType - 1,  scale0,  scale1,  scale2,  scale3,  scale4, 
+              gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -1410,7 +1029,9 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
 __kernel void renderStd5(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
-                               __global float *dist) {
+                               __global float *dist, __global float *scale,
+                               __global float *gradVecs, uint numGradVecs,
+                               uint numOctaves, float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -1458,26 +1079,31 @@ __kernel void renderStd5(__global uint *bvh, __global float *pos,
   img += 4 * posIndex;
   dist += posIndex;
   traverseBVH5(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4, 
-                     img, dist);
+                     img, dist,  scale[0],  scale[1],  scale[2],  scale[3],  scale[4], 
+                     gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 #ifndef NON_REP_
 #define NON_REP_
 
-uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
-  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha,
+                        uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) *
+                                   (255 - frontAlpha) * (back & 0xFF) /
+                                   255.0f) /
+         combinedAlpha;
 }
 
 void placeBehind(uint color, __global uchar *img) {
   uchar frontAlpha = *(img + 3);
-  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  uchar combinedAlpha =
+      frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
   *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
-  img++;
-  *img = combinedAlpha;
+  *++img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -1486,14 +1112,14 @@ void placeBehind(uint color, __global uchar *img) {
 BVH format:
 
 float minmax[6][2];
-int isOctree;
+int objType;
 
-The struct is different for leaf nodes (nodes where isOctree). The rest of the
-struct for a leaf node is as follows:
+The struct is different for leaf nodes (nodes where objType > 0). The rest of
+the struct for a leaf node is as follows:
 
-int octree;
-This is the value of octreePtr - &octree, where octreePtr is a pointer to the
-octree.
+int obj;
+This is the value of objPtr - &obj, where objPtr is a pointer to the
+object.
 
 The rest of the struct for a non-leaf node is as follows:
 
@@ -1511,376 +1137,15 @@ each other. Along this axis, left must be on the left of right.
 
 
 
-Octree format:
-// TODO: IMPLEMENT ROTATED OCTREES
-
-Header:
+Object format:
+// TODO: IMPLEMENT ROTATED OBJECTS
 
 float origin[6];
-float sidelength;
-This is the sidelength of the root node.
-
-The root node is immediately after the header.
-
-Node:
-
-int isLeaf;
-If isLeaf, then the following immediately follows:
-
-int color;
-
-Otherwise, the following immediately follows:
-
-int children[2 ** 6];
-The index of the node with minimum coordinates is 0, while changing the 2 **
-IND bit would change only the coordinate on axis IND.
-
-Each value in children in equal to childPtr - children, where childPtr is a
-pointer to the corresponding node.
+uint objDims[6];
+uint hashMapSize;
+uint hashMap[hashMapSize][6 + 1];
 
 */
-typedef struct StackEntry6 {
-
-  bool indexed;
-  __global uint *node;
-  size_t index;
-   float middle0;
-  float farEnd0;
-   float middle1;
-  float farEnd1;
-   float middle2;
-  float farEnd2;
-   float middle3;
-  float farEnd3;
-   float middle4;
-  float farEnd4;
-   float middle5;
-  float farEnd5;
-  
-} StackEntry6;
-
-void makeChild6(const StackEntry6 *parent, size_t index,
-                      StackEntry6 *child) {
-  child->indexed = false;
-  child->node = parent->node + 1 + parent->node[index + 1];
-   child->middle0 =
-      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
-      (((index >> 0) & 1) ^ (parent->farEnd0 < parent->middle0)) *
-          (parent->farEnd0 - parent->middle0);
-  child->farEnd0 =
-      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
-   child->middle1 =
-      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
-      (((index >> 1) & 1) ^ (parent->farEnd1 < parent->middle1)) *
-          (parent->farEnd1 - parent->middle1);
-  child->farEnd1 =
-      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
-   child->middle2 =
-      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
-      (((index >> 2) & 1) ^ (parent->farEnd2 < parent->middle2)) *
-          (parent->farEnd2 - parent->middle2);
-  child->farEnd2 =
-      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
-   child->middle3 =
-      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
-      (((index >> 3) & 1) ^ (parent->farEnd3 < parent->middle3)) *
-          (parent->farEnd3 - parent->middle3);
-  child->farEnd3 =
-      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
-   child->middle4 =
-      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
-      (((index >> 4) & 1) ^ (parent->farEnd4 < parent->middle4)) *
-          (parent->farEnd4 - parent->middle4);
-  child->farEnd4 =
-      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
-   child->middle5 =
-      1.5f * parent->middle5 - 0.5f * parent->farEnd5 +
-      (((index >> 5) & 1) ^ (parent->farEnd5 < parent->middle5)) *
-          (parent->farEnd5 - parent->middle5);
-  child->farEnd5 =
-      child->middle5 + (parent->farEnd5 - parent->middle5) / 2;
-  
-}
-
-bool traverseOctree6(__global uint *octree,
-                            float pos0, float dir0,
-                           float invdir0,  float pos1, float dir1,
-                           float invdir1,  float pos2, float dir2,
-                           float invdir2,  float pos3, float dir3,
-                           float invdir3,  float pos4, float dir4,
-                           float invdir4,  float pos5, float dir5,
-                           float invdir5, 
-                           __global uchar * img, __global float *dist) {
-  __global float *header = (__global float *)octree;
-   float origin0 = *header++;
-   float origin1 = *header++;
-   float origin2 = *header++;
-   float origin3 = *header++;
-   float origin4 = *header++;
-   float origin5 = *header++;
-  
-  float sidelength = *header++;
-  octree = (__global uint *)header;
-
-  float tminMax = 1e-8f;
-  float tmaxMin = FLT_MAX;
-   float t00 = (origin0 - pos0) * invdir0;
-  float t10 = (origin0 + sidelength - pos0) * invdir0;
-  tminMax = fmax(tminMax, fmin(t00, t10));
-  tmaxMin = fmin(tmaxMin, fmax(t00, t10));
-   float t01 = (origin1 - pos1) * invdir1;
-  float t11 = (origin1 + sidelength - pos1) * invdir1;
-  tminMax = fmax(tminMax, fmin(t01, t11));
-  tmaxMin = fmin(tmaxMin, fmax(t01, t11));
-   float t02 = (origin2 - pos2) * invdir2;
-  float t12 = (origin2 + sidelength - pos2) * invdir2;
-  tminMax = fmax(tminMax, fmin(t02, t12));
-  tmaxMin = fmin(tmaxMin, fmax(t02, t12));
-   float t03 = (origin3 - pos3) * invdir3;
-  float t13 = (origin3 + sidelength - pos3) * invdir3;
-  tminMax = fmax(tminMax, fmin(t03, t13));
-  tmaxMin = fmin(tmaxMin, fmax(t03, t13));
-   float t04 = (origin4 - pos4) * invdir4;
-  float t14 = (origin4 + sidelength - pos4) * invdir4;
-  tminMax = fmax(tminMax, fmin(t04, t14));
-  tmaxMin = fmin(tmaxMin, fmax(t04, t14));
-   float t05 = (origin5 - pos5) * invdir5;
-  float t15 = (origin5 + sidelength - pos5) * invdir5;
-  tminMax = fmax(tminMax, fmin(t05, t15));
-  tmaxMin = fmin(tmaxMin, fmax(t05, t15));
-  
-  if (tminMax >= tmaxMin) {
-    return false;
-  }
-
-  float currDist = tminMax + 1e-3f;
-   float currPos0 = pos0 + currDist * dir0;
-   float currPos1 = pos1 + currDist * dir1;
-   float currPos2 = pos2 + currDist * dir2;
-   float currPos3 = pos3 + currDist * dir3;
-   float currPos4 = pos4 + currDist * dir4;
-   float currPos5 = pos5 + currDist * dir5;
-  
-
-  StackEntry6 stack[12];
-  size_t stackInd = 0;
-  StackEntry6 baseEntry;
-  baseEntry.indexed = false;
-  baseEntry.node = octree;
-   baseEntry.middle0 = origin0 + sidelength / 2;
-  baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
-   baseEntry.middle1 = origin1 + sidelength / 2;
-  baseEntry.farEnd1 = origin1 + (invdir1 > 0) * sidelength;
-   baseEntry.middle2 = origin2 + sidelength / 2;
-  baseEntry.farEnd2 = origin2 + (invdir2 > 0) * sidelength;
-   baseEntry.middle3 = origin3 + sidelength / 2;
-  baseEntry.farEnd3 = origin3 + (invdir3 > 0) * sidelength;
-   baseEntry.middle4 = origin4 + sidelength / 2;
-  baseEntry.farEnd4 = origin4 + (invdir4 > 0) * sidelength;
-   baseEntry.middle5 = origin5 + sidelength / 2;
-  baseEntry.farEnd5 = origin5 + (invdir5 > 0) * sidelength;
-  
-  stack[stackInd++] = baseEntry;
-  bool debug = true;
-  __global float *distp = dist;
-  size_t i = 0;
-  while (stackInd && i < 100) {
-    i++;
-    StackEntry6 entry = stack[--stackInd];
-    /*
-    if (debug) {
-      printf("currDist: %f, entry.indexed: %i, entry.index: %lu\n", currDist,
-             (int)entry.indexed, entry.index);
-       printf(
-          "currPos0: %f, entry.middle0: %f, entry.farEnd0: %f\n",
-          currPos0, entry.middle0, entry.farEnd0);
-       printf(
-          "currPos1: %f, entry.middle1: %f, entry.farEnd1: %f\n",
-          currPos1, entry.middle1, entry.farEnd1);
-       printf(
-          "currPos2: %f, entry.middle2: %f, entry.farEnd2: %f\n",
-          currPos2, entry.middle2, entry.farEnd2);
-       printf(
-          "currPos3: %f, entry.middle3: %f, entry.farEnd3: %f\n",
-          currPos3, entry.middle3, entry.farEnd3);
-       printf(
-          "currPos4: %f, entry.middle4: %f, entry.farEnd4: %f\n",
-          currPos4, entry.middle4, entry.farEnd4);
-       printf(
-          "currPos5: %f, entry.middle5: %f, entry.farEnd5: %f\n",
-          currPos5, entry.middle5, entry.farEnd5);
-      
-      if (*entry.node) {
-        printf("Leaf node\n");
-      } else {
-        printf("\n");
-      }
-    }
-    */
-    /*
-    *distp++ = currDist;
-     *distp++ = currPos0;
-    *distp++ = invdir0;
-    *distp++ = entry.middle0;
-    *distp++ = entry.farEnd0;
-     *distp++ = currPos1;
-    *distp++ = invdir1;
-    *distp++ = entry.middle1;
-    *distp++ = entry.farEnd1;
-     *distp++ = currPos2;
-    *distp++ = invdir2;
-    *distp++ = entry.middle2;
-    *distp++ = entry.farEnd2;
-     *distp++ = currPos3;
-    *distp++ = invdir3;
-    *distp++ = entry.middle3;
-    *distp++ = entry.farEnd3;
-     *distp++ = currPos4;
-    *distp++ = invdir4;
-    *distp++ = entry.middle4;
-    *distp++ = entry.farEnd4;
-     *distp++ = currPos5;
-    *distp++ = invdir5;
-    *distp++ = entry.middle5;
-    *distp++ = entry.farEnd5;
-    
-    *distp++ = *entry.node;
-    *distp++ = stackInd;
-    */
-    if (*entry.node) {
-      // this is a leaf node
-      placeBehind(*(entry.node + 1), img);
-      if (*(img + 3) == 0xFF) {
-        *dist = currDist;
-        return true;
-      }
-      float minStep = FLT_MAX;
-       minStep =
-          fmin(minStep, (entry.farEnd0 - currPos0) * invdir0);
-       minStep =
-          fmin(minStep, (entry.farEnd1 - currPos1) * invdir1);
-       minStep =
-          fmin(minStep, (entry.farEnd2 - currPos2) * invdir2);
-       minStep =
-          fmin(minStep, (entry.farEnd3 - currPos3) * invdir3);
-       minStep =
-          fmin(minStep, (entry.farEnd4 - currPos4) * invdir4);
-       minStep =
-          fmin(minStep, (entry.farEnd5 - currPos5) * invdir5);
-      
-      if (minStep <= -1e-3f) {
-        continue;
-      }
-      currDist += minStep + 1e-3f;
-       currPos0 = pos0 + currDist * dir0;
-       currPos1 = pos1 + currDist * dir1;
-       currPos2 = pos2 + currDist * dir2;
-       currPos3 = pos3 + currDist * dir3;
-       currPos4 = pos4 + currDist * dir4;
-       currPos5 = pos5 + currDist * dir5;
-      
-    } else {
-      size_t newIndex = (
-                            ((currPos0 > entry.middle0) ||
-                             (currPos0 == entry.middle0 && (invdir0 > 0)))
-                            << 0) |
-                        (
-                            ((currPos1 > entry.middle1) ||
-                             (currPos1 == entry.middle1 && (invdir1 > 0)))
-                            << 1) |
-                        (
-                            ((currPos2 > entry.middle2) ||
-                             (currPos2 == entry.middle2 && (invdir2 > 0)))
-                            << 2) |
-                        (
-                            ((currPos3 > entry.middle3) ||
-                             (currPos3 == entry.middle3 && (invdir3 > 0)))
-                            << 3) |
-                        (
-                            ((currPos4 > entry.middle4) ||
-                             (currPos4 == entry.middle4 && (invdir4 > 0)))
-                            << 4) |
-                        (
-                            ((currPos5 > entry.middle5) ||
-                             (currPos5 == entry.middle5 && (invdir5 > 0)))
-                            << 5) |
-                        
-      0;
-      if (entry.indexed) {
-        size_t diffIndex = newIndex ^ entry.index;
-        if (diffIndex) {
-          entry.index = newIndex;
-          if (((entry.farEnd0 - currPos0) * invdir0 >
-                                 0) &&
-                  ((entry.farEnd1 - currPos1) * invdir1 >
-                                 0) &&
-                  ((entry.farEnd2 - currPos2) * invdir2 >
-                                 0) &&
-                  ((entry.farEnd3 - currPos3) * invdir3 >
-                                 0) &&
-                  ((entry.farEnd4 - currPos4) * invdir4 >
-                                 0) &&
-                  ((entry.farEnd5 - currPos5) * invdir5 >
-                                 0) &&
-                  
-              true) {
-            stack[stackInd++] = entry;
-          }
-          size_t tmpIndex = newIndex;
-          StackEntry6 child;
-           if ((1 << 0) & diffIndex) {
-            makeChild6(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 0);
-          }
-           if ((1 << 1) & diffIndex) {
-            makeChild6(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 1);
-          }
-           if ((1 << 2) & diffIndex) {
-            makeChild6(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 2);
-          }
-           if ((1 << 3) & diffIndex) {
-            makeChild6(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 3);
-          }
-           if ((1 << 4) & diffIndex) {
-            makeChild6(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 4);
-          }
-           if ((1 << 5) & diffIndex) {
-            makeChild6(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 5);
-          }
-          
-          continue;
-        }
-      }
-      entry.index = newIndex;
-      entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
-              ((entry.farEnd5 - currPos5) * invdir5 > 0) &&
-              
-          true) {
-        stack[stackInd++] = entry;
-      }
-      StackEntry6 child;
-      makeChild6(&entry, entry.index, &child);
-      stack[stackInd++] = child;
-    }
-  }
-  return false;
-}
 
 bool rayBBox6( float pos0, float invdir0,
                     float min0, float max0,  float pos1, float invdir1,
@@ -1889,8 +1154,7 @@ bool rayBBox6( float pos0, float invdir0,
                     float min3, float max3,  float pos4, float invdir4,
                     float min4, float max4,  float pos5, float invdir5,
                     float min5, float max5, 
-                    int unused) {
-  (void)unused;
+                    float *dist) {
   // maximum of the lower bounds
   float tminMax = 1e-8f;
   // minimum of the upper bounds
@@ -1920,7 +1184,187 @@ bool rayBBox6( float pos0, float invdir0,
   tminMax = fmax(tminMax, fmin(t05, t15));
   tmaxMin = fmin(tmaxMin, fmax(t05, t15));
   
+  *dist = tminMax;
   return tminMax < tmaxMin;
+}
+
+uint grey6(float f) {
+  uint part = (f * 128.0) + 128.0;
+  return 0xFF | (part << 8) | (part << 16) | (part << 24);
+}
+
+bool traverseObject6(__global uint *object,
+                            float pos0, float dir0,
+                           float invdir0,  float pos1, float dir1,
+                           float invdir1,  float pos2, float dir2,
+                           float invdir2,  float pos3, float dir3,
+                           float invdir3,  float pos4, float dir4,
+                           float invdir4,  float pos5, float dir5,
+                           float invdir5, 
+                           __global uchar * img, __global float *dist,
+                           bool hasTerrain,  float scale0,
+                            float scale1,
+                            float scale2,
+                            float scale3,
+                            float scale4,
+                            float scale5,
+                           
+                           __global float *gradVecs, uint numGradVecs,
+                           uint numOctaves, float persistence) {
+  __global float *fobject = (__global float *)object;
+   float origin0 = *fobject++;
+   float origin1 = *fobject++;
+   float origin2 = *fobject++;
+   float origin3 = *fobject++;
+   float origin4 = *fobject++;
+   float origin5 = *fobject++;
+  
+  object = (__global uint *)fobject;
+   uint objDim0 = *object++;
+   uint objDim1 = *object++;
+   uint objDim2 = *object++;
+   uint objDim3 = *object++;
+   uint objDim4 = *object++;
+   uint objDim5 = *object++;
+  
+  uint hashMapSize = *object++;
+  uint maxHash = hashMapSize * (6 + 1);
+
+  float currDist;
+  if (!rayBBox6( pos0, invdir0, origin0,
+                      origin0 + objDim0,  pos1, invdir1, origin1,
+                      origin1 + objDim1,  pos2, invdir2, origin2,
+                      origin2 + objDim2,  pos3, invdir3, origin3,
+                      origin3 + objDim3,  pos4, invdir4, origin4,
+                      origin4 + objDim4,  pos5, invdir5, origin5,
+                      origin5 + objDim5, 
+                      &currDist)) {
+    return false;
+  }
+
+  currDist += 1e-3;
+   float currPos0 = pos0 + currDist * dir0;
+  int currBlock0 = fastFloor(currPos0 - origin0);
+  int dirdir0 = 2 * (invdir0 > 0) - 1;
+   float currPos1 = pos1 + currDist * dir1;
+  int currBlock1 = fastFloor(currPos1 - origin1);
+  int dirdir1 = 2 * (invdir1 > 0) - 1;
+   float currPos2 = pos2 + currDist * dir2;
+  int currBlock2 = fastFloor(currPos2 - origin2);
+  int dirdir2 = 2 * (invdir2 > 0) - 1;
+   float currPos3 = pos3 + currDist * dir3;
+  int currBlock3 = fastFloor(currPos3 - origin3);
+  int dirdir3 = 2 * (invdir3 > 0) - 1;
+   float currPos4 = pos4 + currDist * dir4;
+  int currBlock4 = fastFloor(currPos4 - origin4);
+  int dirdir4 = 2 * (invdir4 > 0) - 1;
+   float currPos5 = pos5 + currDist * dir5;
+  int currBlock5 = fastFloor(currPos5 - origin5);
+  int dirdir5 = 2 * (invdir5 > 0) - 1;
+  
+
+  if (get_global_id(0) == 400) {
+    //printf("%i\n", get_global_id(1));
+  }
+  while (true) {
+    // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
+    // currBlock0, currBlock1, currBlock2);
+    uint hashI =
+        (6 + 1) *
+        hash6( currBlock0,  currBlock1,  currBlock2,  currBlock3,  currBlock4,  currBlock5,  0, hashMapSize);
+    uint result;
+    while (true) {
+      if (!(result = object[hashI + 6])) {
+        break;
+      }
+      if ( currBlock0 == object[hashI + 0] &&  currBlock1 == object[hashI + 1] &&  currBlock2 == object[hashI + 2] &&  currBlock3 == object[hashI + 3] &&  currBlock4 == object[hashI + 4] &&  currBlock5 == object[hashI + 5] &&  true) {
+        break;
+      }
+      hashI += 6 + 1;
+      if (hashI >= maxHash) {
+        hashI = 0;
+      }
+    }
+    if (hasTerrain && !result) {
+      result = getNoise6(
+                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2,  scale3, origin3 + currBlock3,  scale4, origin4 + currBlock4,  scale5, origin5 + currBlock5, 
+                   gradVecs, numGradVecs, numOctaves, persistence) > 0
+                   ? grey6(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  currPos3 - origin3 - currBlock3 +  currPos4 - origin4 - currBlock4 +  currPos5 - origin5 - currBlock5 +  0.0) / 6)
+                   : 0;
+    }
+    placeBehind(result, img);
+    if (*(img + 3) == 0xFF) {
+      break;
+    }
+    float dist = INFINITY;
+     dist =
+        fmin(dist, invdir0 * (currBlock0 + (invdir0 > 0) -
+                                (currPos0 - origin0)));
+     dist =
+        fmin(dist, invdir1 * (currBlock1 + (invdir1 > 0) -
+                                (currPos1 - origin1)));
+     dist =
+        fmin(dist, invdir2 * (currBlock2 + (invdir2 > 0) -
+                                (currPos2 - origin2)));
+     dist =
+        fmin(dist, invdir3 * (currBlock3 + (invdir3 > 0) -
+                                (currPos3 - origin3)));
+     dist =
+        fmin(dist, invdir4 * (currBlock4 + (invdir4 > 0) -
+                                (currPos4 - origin4)));
+     dist =
+        fmin(dist, invdir5 * (currBlock5 + (invdir5 > 0) -
+                                (currPos5 - origin5)));
+    
+    dist = fmax(dist, 0);
+    currDist += dist + 1e-3;
+    int change;
+    uint changeMask = 0xFFFFFFFFU;
+     currPos0 = pos0 + currDist * dir0;
+    change = (fastFloor(currPos0 - origin0) - currBlock0) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock0 += change;
+    if (currBlock0 < 0 || currBlock0 >= (int)objDim0) {
+      break;
+    }
+     currPos1 = pos1 + currDist * dir1;
+    change = (fastFloor(currPos1 - origin1) - currBlock1) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock1 += change;
+    if (currBlock1 < 0 || currBlock1 >= (int)objDim1) {
+      break;
+    }
+     currPos2 = pos2 + currDist * dir2;
+    change = (fastFloor(currPos2 - origin2) - currBlock2) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock2 += change;
+    if (currBlock2 < 0 || currBlock2 >= (int)objDim2) {
+      break;
+    }
+     currPos3 = pos3 + currDist * dir3;
+    change = (fastFloor(currPos3 - origin3) - currBlock3) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock3 += change;
+    if (currBlock3 < 0 || currBlock3 >= (int)objDim3) {
+      break;
+    }
+     currPos4 = pos4 + currDist * dir4;
+    change = (fastFloor(currPos4 - origin4) - currBlock4) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock4 += change;
+    if (currBlock4 < 0 || currBlock4 >= (int)objDim4) {
+      break;
+    }
+     currPos5 = pos5 + currDist * dir5;
+    change = (fastFloor(currPos5 - origin5) - currBlock5) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock5 += change;
+    if (currBlock5 < 0 || currBlock5 >= (int)objDim5) {
+      break;
+    }
+    
+  }
+  return false;
 }
 
 bool traverseBVH6(__global uint *bvh,  float pos0,
@@ -1930,7 +1374,10 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
                         float dir3, float invdir3,  float pos4,
                         float dir4, float invdir4,  float pos5,
                         float dir5, float invdir5, 
-                        __global uchar * img, __global float *dist) {
+                        __global uchar * img, __global float *dist,
+                         float scale0,  float scale1,  float scale2,  float scale3,  float scale4,  float scale5, 
+                        __global float *gradVecs, uint numGradVecs,
+                        uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[6];
@@ -1945,6 +1392,7 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
   __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
+  float spam;
   while (stackInd) {
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
@@ -1962,19 +1410,22 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
     float max5 = *floatBVH++;
     
     if (!rayBBox6(
-             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  0)) {
+             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  &spam)) {
       continue;
     }
     currBvh = (__global uint *)floatBVH;
-    if (*currBvh++) {
-      if (traverseOctree6(currBvh + *currBvh,  pos0,
-                                dir0, invdir0,  pos1,
-                                dir1, invdir1,  pos2,
-                                dir2, invdir2,  pos3,
-                                dir3, invdir3,  pos4,
-                                dir4, invdir4,  pos5,
-                                dir5, invdir5, 
-                                img, dist)) {
+    uint objType = *currBvh++;
+    if (objType) {
+      if (traverseObject6(
+              currBvh + *currBvh,  pos0, dir0, invdir0,
+               pos1, dir1, invdir1,
+               pos2, dir2, invdir2,
+               pos3, dir3, invdir3,
+               pos4, dir4, invdir4,
+               pos5, dir5, invdir5,
+              
+              img, dist, objType - 1,  scale0,  scale1,  scale2,  scale3,  scale4,  scale5, 
+              gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -2000,7 +1451,9 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
 __kernel void renderStd6(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
-                               __global float *dist) {
+                               __global float *dist, __global float *scale,
+                               __global float *gradVecs, uint numGradVecs,
+                               uint numOctaves, float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -2053,26 +1506,31 @@ __kernel void renderStd6(__global uint *bvh, __global float *pos,
   img += 4 * posIndex;
   dist += posIndex;
   traverseBVH6(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5, 
-                     img, dist);
+                     img, dist,  scale[0],  scale[1],  scale[2],  scale[3],  scale[4],  scale[5], 
+                     gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 #ifndef NON_REP_
 #define NON_REP_
 
-uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
-  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha,
+                        uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) *
+                                   (255 - frontAlpha) * (back & 0xFF) /
+                                   255.0f) /
+         combinedAlpha;
 }
 
 void placeBehind(uint color, __global uchar *img) {
   uchar frontAlpha = *(img + 3);
-  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  uchar combinedAlpha =
+      frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
   *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
-  img++;
-  *img = combinedAlpha;
+  *++img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -2081,14 +1539,14 @@ void placeBehind(uint color, __global uchar *img) {
 BVH format:
 
 float minmax[7][2];
-int isOctree;
+int objType;
 
-The struct is different for leaf nodes (nodes where isOctree). The rest of the
-struct for a leaf node is as follows:
+The struct is different for leaf nodes (nodes where objType > 0). The rest of
+the struct for a leaf node is as follows:
 
-int octree;
-This is the value of octreePtr - &octree, where octreePtr is a pointer to the
-octree.
+int obj;
+This is the value of objPtr - &obj, where objPtr is a pointer to the
+object.
 
 The rest of the struct for a non-leaf node is as follows:
 
@@ -2106,415 +1564,15 @@ each other. Along this axis, left must be on the left of right.
 
 
 
-Octree format:
-// TODO: IMPLEMENT ROTATED OCTREES
-
-Header:
+Object format:
+// TODO: IMPLEMENT ROTATED OBJECTS
 
 float origin[7];
-float sidelength;
-This is the sidelength of the root node.
-
-The root node is immediately after the header.
-
-Node:
-
-int isLeaf;
-If isLeaf, then the following immediately follows:
-
-int color;
-
-Otherwise, the following immediately follows:
-
-int children[2 ** 7];
-The index of the node with minimum coordinates is 0, while changing the 2 **
-IND bit would change only the coordinate on axis IND.
-
-Each value in children in equal to childPtr - children, where childPtr is a
-pointer to the corresponding node.
+uint objDims[7];
+uint hashMapSize;
+uint hashMap[hashMapSize][7 + 1];
 
 */
-typedef struct StackEntry7 {
-
-  bool indexed;
-  __global uint *node;
-  size_t index;
-   float middle0;
-  float farEnd0;
-   float middle1;
-  float farEnd1;
-   float middle2;
-  float farEnd2;
-   float middle3;
-  float farEnd3;
-   float middle4;
-  float farEnd4;
-   float middle5;
-  float farEnd5;
-   float middle6;
-  float farEnd6;
-  
-} StackEntry7;
-
-void makeChild7(const StackEntry7 *parent, size_t index,
-                      StackEntry7 *child) {
-  child->indexed = false;
-  child->node = parent->node + 1 + parent->node[index + 1];
-   child->middle0 =
-      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
-      (((index >> 0) & 1) ^ (parent->farEnd0 < parent->middle0)) *
-          (parent->farEnd0 - parent->middle0);
-  child->farEnd0 =
-      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
-   child->middle1 =
-      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
-      (((index >> 1) & 1) ^ (parent->farEnd1 < parent->middle1)) *
-          (parent->farEnd1 - parent->middle1);
-  child->farEnd1 =
-      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
-   child->middle2 =
-      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
-      (((index >> 2) & 1) ^ (parent->farEnd2 < parent->middle2)) *
-          (parent->farEnd2 - parent->middle2);
-  child->farEnd2 =
-      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
-   child->middle3 =
-      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
-      (((index >> 3) & 1) ^ (parent->farEnd3 < parent->middle3)) *
-          (parent->farEnd3 - parent->middle3);
-  child->farEnd3 =
-      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
-   child->middle4 =
-      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
-      (((index >> 4) & 1) ^ (parent->farEnd4 < parent->middle4)) *
-          (parent->farEnd4 - parent->middle4);
-  child->farEnd4 =
-      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
-   child->middle5 =
-      1.5f * parent->middle5 - 0.5f * parent->farEnd5 +
-      (((index >> 5) & 1) ^ (parent->farEnd5 < parent->middle5)) *
-          (parent->farEnd5 - parent->middle5);
-  child->farEnd5 =
-      child->middle5 + (parent->farEnd5 - parent->middle5) / 2;
-   child->middle6 =
-      1.5f * parent->middle6 - 0.5f * parent->farEnd6 +
-      (((index >> 6) & 1) ^ (parent->farEnd6 < parent->middle6)) *
-          (parent->farEnd6 - parent->middle6);
-  child->farEnd6 =
-      child->middle6 + (parent->farEnd6 - parent->middle6) / 2;
-  
-}
-
-bool traverseOctree7(__global uint *octree,
-                            float pos0, float dir0,
-                           float invdir0,  float pos1, float dir1,
-                           float invdir1,  float pos2, float dir2,
-                           float invdir2,  float pos3, float dir3,
-                           float invdir3,  float pos4, float dir4,
-                           float invdir4,  float pos5, float dir5,
-                           float invdir5,  float pos6, float dir6,
-                           float invdir6, 
-                           __global uchar * img, __global float *dist) {
-  __global float *header = (__global float *)octree;
-   float origin0 = *header++;
-   float origin1 = *header++;
-   float origin2 = *header++;
-   float origin3 = *header++;
-   float origin4 = *header++;
-   float origin5 = *header++;
-   float origin6 = *header++;
-  
-  float sidelength = *header++;
-  octree = (__global uint *)header;
-
-  float tminMax = 1e-8f;
-  float tmaxMin = FLT_MAX;
-   float t00 = (origin0 - pos0) * invdir0;
-  float t10 = (origin0 + sidelength - pos0) * invdir0;
-  tminMax = fmax(tminMax, fmin(t00, t10));
-  tmaxMin = fmin(tmaxMin, fmax(t00, t10));
-   float t01 = (origin1 - pos1) * invdir1;
-  float t11 = (origin1 + sidelength - pos1) * invdir1;
-  tminMax = fmax(tminMax, fmin(t01, t11));
-  tmaxMin = fmin(tmaxMin, fmax(t01, t11));
-   float t02 = (origin2 - pos2) * invdir2;
-  float t12 = (origin2 + sidelength - pos2) * invdir2;
-  tminMax = fmax(tminMax, fmin(t02, t12));
-  tmaxMin = fmin(tmaxMin, fmax(t02, t12));
-   float t03 = (origin3 - pos3) * invdir3;
-  float t13 = (origin3 + sidelength - pos3) * invdir3;
-  tminMax = fmax(tminMax, fmin(t03, t13));
-  tmaxMin = fmin(tmaxMin, fmax(t03, t13));
-   float t04 = (origin4 - pos4) * invdir4;
-  float t14 = (origin4 + sidelength - pos4) * invdir4;
-  tminMax = fmax(tminMax, fmin(t04, t14));
-  tmaxMin = fmin(tmaxMin, fmax(t04, t14));
-   float t05 = (origin5 - pos5) * invdir5;
-  float t15 = (origin5 + sidelength - pos5) * invdir5;
-  tminMax = fmax(tminMax, fmin(t05, t15));
-  tmaxMin = fmin(tmaxMin, fmax(t05, t15));
-   float t06 = (origin6 - pos6) * invdir6;
-  float t16 = (origin6 + sidelength - pos6) * invdir6;
-  tminMax = fmax(tminMax, fmin(t06, t16));
-  tmaxMin = fmin(tmaxMin, fmax(t06, t16));
-  
-  if (tminMax >= tmaxMin) {
-    return false;
-  }
-
-  float currDist = tminMax + 1e-3f;
-   float currPos0 = pos0 + currDist * dir0;
-   float currPos1 = pos1 + currDist * dir1;
-   float currPos2 = pos2 + currDist * dir2;
-   float currPos3 = pos3 + currDist * dir3;
-   float currPos4 = pos4 + currDist * dir4;
-   float currPos5 = pos5 + currDist * dir5;
-   float currPos6 = pos6 + currDist * dir6;
-  
-
-  StackEntry7 stack[12];
-  size_t stackInd = 0;
-  StackEntry7 baseEntry;
-  baseEntry.indexed = false;
-  baseEntry.node = octree;
-   baseEntry.middle0 = origin0 + sidelength / 2;
-  baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
-   baseEntry.middle1 = origin1 + sidelength / 2;
-  baseEntry.farEnd1 = origin1 + (invdir1 > 0) * sidelength;
-   baseEntry.middle2 = origin2 + sidelength / 2;
-  baseEntry.farEnd2 = origin2 + (invdir2 > 0) * sidelength;
-   baseEntry.middle3 = origin3 + sidelength / 2;
-  baseEntry.farEnd3 = origin3 + (invdir3 > 0) * sidelength;
-   baseEntry.middle4 = origin4 + sidelength / 2;
-  baseEntry.farEnd4 = origin4 + (invdir4 > 0) * sidelength;
-   baseEntry.middle5 = origin5 + sidelength / 2;
-  baseEntry.farEnd5 = origin5 + (invdir5 > 0) * sidelength;
-   baseEntry.middle6 = origin6 + sidelength / 2;
-  baseEntry.farEnd6 = origin6 + (invdir6 > 0) * sidelength;
-  
-  stack[stackInd++] = baseEntry;
-  bool debug = true;
-  __global float *distp = dist;
-  size_t i = 0;
-  while (stackInd && i < 100) {
-    i++;
-    StackEntry7 entry = stack[--stackInd];
-    /*
-    if (debug) {
-      printf("currDist: %f, entry.indexed: %i, entry.index: %lu\n", currDist,
-             (int)entry.indexed, entry.index);
-       printf(
-          "currPos0: %f, entry.middle0: %f, entry.farEnd0: %f\n",
-          currPos0, entry.middle0, entry.farEnd0);
-       printf(
-          "currPos1: %f, entry.middle1: %f, entry.farEnd1: %f\n",
-          currPos1, entry.middle1, entry.farEnd1);
-       printf(
-          "currPos2: %f, entry.middle2: %f, entry.farEnd2: %f\n",
-          currPos2, entry.middle2, entry.farEnd2);
-       printf(
-          "currPos3: %f, entry.middle3: %f, entry.farEnd3: %f\n",
-          currPos3, entry.middle3, entry.farEnd3);
-       printf(
-          "currPos4: %f, entry.middle4: %f, entry.farEnd4: %f\n",
-          currPos4, entry.middle4, entry.farEnd4);
-       printf(
-          "currPos5: %f, entry.middle5: %f, entry.farEnd5: %f\n",
-          currPos5, entry.middle5, entry.farEnd5);
-       printf(
-          "currPos6: %f, entry.middle6: %f, entry.farEnd6: %f\n",
-          currPos6, entry.middle6, entry.farEnd6);
-      
-      if (*entry.node) {
-        printf("Leaf node\n");
-      } else {
-        printf("\n");
-      }
-    }
-    */
-    /*
-    *distp++ = currDist;
-     *distp++ = currPos0;
-    *distp++ = invdir0;
-    *distp++ = entry.middle0;
-    *distp++ = entry.farEnd0;
-     *distp++ = currPos1;
-    *distp++ = invdir1;
-    *distp++ = entry.middle1;
-    *distp++ = entry.farEnd1;
-     *distp++ = currPos2;
-    *distp++ = invdir2;
-    *distp++ = entry.middle2;
-    *distp++ = entry.farEnd2;
-     *distp++ = currPos3;
-    *distp++ = invdir3;
-    *distp++ = entry.middle3;
-    *distp++ = entry.farEnd3;
-     *distp++ = currPos4;
-    *distp++ = invdir4;
-    *distp++ = entry.middle4;
-    *distp++ = entry.farEnd4;
-     *distp++ = currPos5;
-    *distp++ = invdir5;
-    *distp++ = entry.middle5;
-    *distp++ = entry.farEnd5;
-     *distp++ = currPos6;
-    *distp++ = invdir6;
-    *distp++ = entry.middle6;
-    *distp++ = entry.farEnd6;
-    
-    *distp++ = *entry.node;
-    *distp++ = stackInd;
-    */
-    if (*entry.node) {
-      // this is a leaf node
-      placeBehind(*(entry.node + 1), img);
-      if (*(img + 3) == 0xFF) {
-        *dist = currDist;
-        return true;
-      }
-      float minStep = FLT_MAX;
-       minStep =
-          fmin(minStep, (entry.farEnd0 - currPos0) * invdir0);
-       minStep =
-          fmin(minStep, (entry.farEnd1 - currPos1) * invdir1);
-       minStep =
-          fmin(minStep, (entry.farEnd2 - currPos2) * invdir2);
-       minStep =
-          fmin(minStep, (entry.farEnd3 - currPos3) * invdir3);
-       minStep =
-          fmin(minStep, (entry.farEnd4 - currPos4) * invdir4);
-       minStep =
-          fmin(minStep, (entry.farEnd5 - currPos5) * invdir5);
-       minStep =
-          fmin(minStep, (entry.farEnd6 - currPos6) * invdir6);
-      
-      if (minStep <= -1e-3f) {
-        continue;
-      }
-      currDist += minStep + 1e-3f;
-       currPos0 = pos0 + currDist * dir0;
-       currPos1 = pos1 + currDist * dir1;
-       currPos2 = pos2 + currDist * dir2;
-       currPos3 = pos3 + currDist * dir3;
-       currPos4 = pos4 + currDist * dir4;
-       currPos5 = pos5 + currDist * dir5;
-       currPos6 = pos6 + currDist * dir6;
-      
-    } else {
-      size_t newIndex = (
-                            ((currPos0 > entry.middle0) ||
-                             (currPos0 == entry.middle0 && (invdir0 > 0)))
-                            << 0) |
-                        (
-                            ((currPos1 > entry.middle1) ||
-                             (currPos1 == entry.middle1 && (invdir1 > 0)))
-                            << 1) |
-                        (
-                            ((currPos2 > entry.middle2) ||
-                             (currPos2 == entry.middle2 && (invdir2 > 0)))
-                            << 2) |
-                        (
-                            ((currPos3 > entry.middle3) ||
-                             (currPos3 == entry.middle3 && (invdir3 > 0)))
-                            << 3) |
-                        (
-                            ((currPos4 > entry.middle4) ||
-                             (currPos4 == entry.middle4 && (invdir4 > 0)))
-                            << 4) |
-                        (
-                            ((currPos5 > entry.middle5) ||
-                             (currPos5 == entry.middle5 && (invdir5 > 0)))
-                            << 5) |
-                        (
-                            ((currPos6 > entry.middle6) ||
-                             (currPos6 == entry.middle6 && (invdir6 > 0)))
-                            << 6) |
-                        
-      0;
-      if (entry.indexed) {
-        size_t diffIndex = newIndex ^ entry.index;
-        if (diffIndex) {
-          entry.index = newIndex;
-          if (((entry.farEnd0 - currPos0) * invdir0 >
-                                 0) &&
-                  ((entry.farEnd1 - currPos1) * invdir1 >
-                                 0) &&
-                  ((entry.farEnd2 - currPos2) * invdir2 >
-                                 0) &&
-                  ((entry.farEnd3 - currPos3) * invdir3 >
-                                 0) &&
-                  ((entry.farEnd4 - currPos4) * invdir4 >
-                                 0) &&
-                  ((entry.farEnd5 - currPos5) * invdir5 >
-                                 0) &&
-                  ((entry.farEnd6 - currPos6) * invdir6 >
-                                 0) &&
-                  
-              true) {
-            stack[stackInd++] = entry;
-          }
-          size_t tmpIndex = newIndex;
-          StackEntry7 child;
-           if ((1 << 0) & diffIndex) {
-            makeChild7(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 0);
-          }
-           if ((1 << 1) & diffIndex) {
-            makeChild7(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 1);
-          }
-           if ((1 << 2) & diffIndex) {
-            makeChild7(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 2);
-          }
-           if ((1 << 3) & diffIndex) {
-            makeChild7(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 3);
-          }
-           if ((1 << 4) & diffIndex) {
-            makeChild7(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 4);
-          }
-           if ((1 << 5) & diffIndex) {
-            makeChild7(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 5);
-          }
-           if ((1 << 6) & diffIndex) {
-            makeChild7(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 6);
-          }
-          
-          continue;
-        }
-      }
-      entry.index = newIndex;
-      entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
-              ((entry.farEnd5 - currPos5) * invdir5 > 0) &&
-              ((entry.farEnd6 - currPos6) * invdir6 > 0) &&
-              
-          true) {
-        stack[stackInd++] = entry;
-      }
-      StackEntry7 child;
-      makeChild7(&entry, entry.index, &child);
-      stack[stackInd++] = child;
-    }
-  }
-  return false;
-}
 
 bool rayBBox7( float pos0, float invdir0,
                     float min0, float max0,  float pos1, float invdir1,
@@ -2524,8 +1582,7 @@ bool rayBBox7( float pos0, float invdir0,
                     float min4, float max4,  float pos5, float invdir5,
                     float min5, float max5,  float pos6, float invdir6,
                     float min6, float max6, 
-                    int unused) {
-  (void)unused;
+                    float *dist) {
   // maximum of the lower bounds
   float tminMax = 1e-8f;
   // minimum of the upper bounds
@@ -2559,7 +1616,205 @@ bool rayBBox7( float pos0, float invdir0,
   tminMax = fmax(tminMax, fmin(t06, t16));
   tmaxMin = fmin(tmaxMin, fmax(t06, t16));
   
+  *dist = tminMax;
   return tminMax < tmaxMin;
+}
+
+uint grey7(float f) {
+  uint part = (f * 128.0) + 128.0;
+  return 0xFF | (part << 8) | (part << 16) | (part << 24);
+}
+
+bool traverseObject7(__global uint *object,
+                            float pos0, float dir0,
+                           float invdir0,  float pos1, float dir1,
+                           float invdir1,  float pos2, float dir2,
+                           float invdir2,  float pos3, float dir3,
+                           float invdir3,  float pos4, float dir4,
+                           float invdir4,  float pos5, float dir5,
+                           float invdir5,  float pos6, float dir6,
+                           float invdir6, 
+                           __global uchar * img, __global float *dist,
+                           bool hasTerrain,  float scale0,
+                            float scale1,
+                            float scale2,
+                            float scale3,
+                            float scale4,
+                            float scale5,
+                            float scale6,
+                           
+                           __global float *gradVecs, uint numGradVecs,
+                           uint numOctaves, float persistence) {
+  __global float *fobject = (__global float *)object;
+   float origin0 = *fobject++;
+   float origin1 = *fobject++;
+   float origin2 = *fobject++;
+   float origin3 = *fobject++;
+   float origin4 = *fobject++;
+   float origin5 = *fobject++;
+   float origin6 = *fobject++;
+  
+  object = (__global uint *)fobject;
+   uint objDim0 = *object++;
+   uint objDim1 = *object++;
+   uint objDim2 = *object++;
+   uint objDim3 = *object++;
+   uint objDim4 = *object++;
+   uint objDim5 = *object++;
+   uint objDim6 = *object++;
+  
+  uint hashMapSize = *object++;
+  uint maxHash = hashMapSize * (7 + 1);
+
+  float currDist;
+  if (!rayBBox7( pos0, invdir0, origin0,
+                      origin0 + objDim0,  pos1, invdir1, origin1,
+                      origin1 + objDim1,  pos2, invdir2, origin2,
+                      origin2 + objDim2,  pos3, invdir3, origin3,
+                      origin3 + objDim3,  pos4, invdir4, origin4,
+                      origin4 + objDim4,  pos5, invdir5, origin5,
+                      origin5 + objDim5,  pos6, invdir6, origin6,
+                      origin6 + objDim6, 
+                      &currDist)) {
+    return false;
+  }
+
+  currDist += 1e-3;
+   float currPos0 = pos0 + currDist * dir0;
+  int currBlock0 = fastFloor(currPos0 - origin0);
+  int dirdir0 = 2 * (invdir0 > 0) - 1;
+   float currPos1 = pos1 + currDist * dir1;
+  int currBlock1 = fastFloor(currPos1 - origin1);
+  int dirdir1 = 2 * (invdir1 > 0) - 1;
+   float currPos2 = pos2 + currDist * dir2;
+  int currBlock2 = fastFloor(currPos2 - origin2);
+  int dirdir2 = 2 * (invdir2 > 0) - 1;
+   float currPos3 = pos3 + currDist * dir3;
+  int currBlock3 = fastFloor(currPos3 - origin3);
+  int dirdir3 = 2 * (invdir3 > 0) - 1;
+   float currPos4 = pos4 + currDist * dir4;
+  int currBlock4 = fastFloor(currPos4 - origin4);
+  int dirdir4 = 2 * (invdir4 > 0) - 1;
+   float currPos5 = pos5 + currDist * dir5;
+  int currBlock5 = fastFloor(currPos5 - origin5);
+  int dirdir5 = 2 * (invdir5 > 0) - 1;
+   float currPos6 = pos6 + currDist * dir6;
+  int currBlock6 = fastFloor(currPos6 - origin6);
+  int dirdir6 = 2 * (invdir6 > 0) - 1;
+  
+
+  if (get_global_id(0) == 400) {
+    //printf("%i\n", get_global_id(1));
+  }
+  while (true) {
+    // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
+    // currBlock0, currBlock1, currBlock2);
+    uint hashI =
+        (7 + 1) *
+        hash7( currBlock0,  currBlock1,  currBlock2,  currBlock3,  currBlock4,  currBlock5,  currBlock6,  0, hashMapSize);
+    uint result;
+    while (true) {
+      if (!(result = object[hashI + 7])) {
+        break;
+      }
+      if ( currBlock0 == object[hashI + 0] &&  currBlock1 == object[hashI + 1] &&  currBlock2 == object[hashI + 2] &&  currBlock3 == object[hashI + 3] &&  currBlock4 == object[hashI + 4] &&  currBlock5 == object[hashI + 5] &&  currBlock6 == object[hashI + 6] &&  true) {
+        break;
+      }
+      hashI += 7 + 1;
+      if (hashI >= maxHash) {
+        hashI = 0;
+      }
+    }
+    if (hasTerrain && !result) {
+      result = getNoise7(
+                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2,  scale3, origin3 + currBlock3,  scale4, origin4 + currBlock4,  scale5, origin5 + currBlock5,  scale6, origin6 + currBlock6, 
+                   gradVecs, numGradVecs, numOctaves, persistence) > 0
+                   ? grey7(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  currPos3 - origin3 - currBlock3 +  currPos4 - origin4 - currBlock4 +  currPos5 - origin5 - currBlock5 +  currPos6 - origin6 - currBlock6 +  0.0) / 7)
+                   : 0;
+    }
+    placeBehind(result, img);
+    if (*(img + 3) == 0xFF) {
+      break;
+    }
+    float dist = INFINITY;
+     dist =
+        fmin(dist, invdir0 * (currBlock0 + (invdir0 > 0) -
+                                (currPos0 - origin0)));
+     dist =
+        fmin(dist, invdir1 * (currBlock1 + (invdir1 > 0) -
+                                (currPos1 - origin1)));
+     dist =
+        fmin(dist, invdir2 * (currBlock2 + (invdir2 > 0) -
+                                (currPos2 - origin2)));
+     dist =
+        fmin(dist, invdir3 * (currBlock3 + (invdir3 > 0) -
+                                (currPos3 - origin3)));
+     dist =
+        fmin(dist, invdir4 * (currBlock4 + (invdir4 > 0) -
+                                (currPos4 - origin4)));
+     dist =
+        fmin(dist, invdir5 * (currBlock5 + (invdir5 > 0) -
+                                (currPos5 - origin5)));
+     dist =
+        fmin(dist, invdir6 * (currBlock6 + (invdir6 > 0) -
+                                (currPos6 - origin6)));
+    
+    dist = fmax(dist, 0);
+    currDist += dist + 1e-3;
+    int change;
+    uint changeMask = 0xFFFFFFFFU;
+     currPos0 = pos0 + currDist * dir0;
+    change = (fastFloor(currPos0 - origin0) - currBlock0) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock0 += change;
+    if (currBlock0 < 0 || currBlock0 >= (int)objDim0) {
+      break;
+    }
+     currPos1 = pos1 + currDist * dir1;
+    change = (fastFloor(currPos1 - origin1) - currBlock1) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock1 += change;
+    if (currBlock1 < 0 || currBlock1 >= (int)objDim1) {
+      break;
+    }
+     currPos2 = pos2 + currDist * dir2;
+    change = (fastFloor(currPos2 - origin2) - currBlock2) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock2 += change;
+    if (currBlock2 < 0 || currBlock2 >= (int)objDim2) {
+      break;
+    }
+     currPos3 = pos3 + currDist * dir3;
+    change = (fastFloor(currPos3 - origin3) - currBlock3) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock3 += change;
+    if (currBlock3 < 0 || currBlock3 >= (int)objDim3) {
+      break;
+    }
+     currPos4 = pos4 + currDist * dir4;
+    change = (fastFloor(currPos4 - origin4) - currBlock4) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock4 += change;
+    if (currBlock4 < 0 || currBlock4 >= (int)objDim4) {
+      break;
+    }
+     currPos5 = pos5 + currDist * dir5;
+    change = (fastFloor(currPos5 - origin5) - currBlock5) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock5 += change;
+    if (currBlock5 < 0 || currBlock5 >= (int)objDim5) {
+      break;
+    }
+     currPos6 = pos6 + currDist * dir6;
+    change = (fastFloor(currPos6 - origin6) - currBlock6) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock6 += change;
+    if (currBlock6 < 0 || currBlock6 >= (int)objDim6) {
+      break;
+    }
+    
+  }
+  return false;
 }
 
 bool traverseBVH7(__global uint *bvh,  float pos0,
@@ -2570,7 +1825,10 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
                         float dir4, float invdir4,  float pos5,
                         float dir5, float invdir5,  float pos6,
                         float dir6, float invdir6, 
-                        __global uchar * img, __global float *dist) {
+                        __global uchar * img, __global float *dist,
+                         float scale0,  float scale1,  float scale2,  float scale3,  float scale4,  float scale5,  float scale6, 
+                        __global float *gradVecs, uint numGradVecs,
+                        uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[7];
@@ -2586,6 +1844,7 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
   __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
+  float spam;
   while (stackInd) {
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
@@ -2605,20 +1864,23 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
     float max6 = *floatBVH++;
     
     if (!rayBBox7(
-             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  pos6, invdir6, min6, max6,  0)) {
+             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  pos6, invdir6, min6, max6,  &spam)) {
       continue;
     }
     currBvh = (__global uint *)floatBVH;
-    if (*currBvh++) {
-      if (traverseOctree7(currBvh + *currBvh,  pos0,
-                                dir0, invdir0,  pos1,
-                                dir1, invdir1,  pos2,
-                                dir2, invdir2,  pos3,
-                                dir3, invdir3,  pos4,
-                                dir4, invdir4,  pos5,
-                                dir5, invdir5,  pos6,
-                                dir6, invdir6, 
-                                img, dist)) {
+    uint objType = *currBvh++;
+    if (objType) {
+      if (traverseObject7(
+              currBvh + *currBvh,  pos0, dir0, invdir0,
+               pos1, dir1, invdir1,
+               pos2, dir2, invdir2,
+               pos3, dir3, invdir3,
+               pos4, dir4, invdir4,
+               pos5, dir5, invdir5,
+               pos6, dir6, invdir6,
+              
+              img, dist, objType - 1,  scale0,  scale1,  scale2,  scale3,  scale4,  scale5,  scale6, 
+              gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -2644,7 +1906,9 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
 __kernel void renderStd7(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
-                               __global float *dist) {
+                               __global float *dist, __global float *scale,
+                               __global float *gradVecs, uint numGradVecs,
+                               uint numOctaves, float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -2702,26 +1966,31 @@ __kernel void renderStd7(__global uint *bvh, __global float *pos,
   img += 4 * posIndex;
   dist += posIndex;
   traverseBVH7(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5,  pos6, dir6, invdir6, 
-                     img, dist);
+                     img, dist,  scale[0],  scale[1],  scale[2],  scale[3],  scale[4],  scale[5],  scale[6], 
+                     gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 #ifndef NON_REP_
 #define NON_REP_
 
-uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
-  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha,
+                        uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) *
+                                   (255 - frontAlpha) * (back & 0xFF) /
+                                   255.0f) /
+         combinedAlpha;
 }
 
 void placeBehind(uint color, __global uchar *img) {
   uchar frontAlpha = *(img + 3);
-  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  uchar combinedAlpha =
+      frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
   *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
-  img++;
-  *img = combinedAlpha;
+  *++img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -2730,14 +1999,14 @@ void placeBehind(uint color, __global uchar *img) {
 BVH format:
 
 float minmax[8][2];
-int isOctree;
+int objType;
 
-The struct is different for leaf nodes (nodes where isOctree). The rest of the
-struct for a leaf node is as follows:
+The struct is different for leaf nodes (nodes where objType > 0). The rest of
+the struct for a leaf node is as follows:
 
-int octree;
-This is the value of octreePtr - &octree, where octreePtr is a pointer to the
-octree.
+int obj;
+This is the value of objPtr - &obj, where objPtr is a pointer to the
+object.
 
 The rest of the struct for a non-leaf node is as follows:
 
@@ -2755,454 +2024,15 @@ each other. Along this axis, left must be on the left of right.
 
 
 
-Octree format:
-// TODO: IMPLEMENT ROTATED OCTREES
-
-Header:
+Object format:
+// TODO: IMPLEMENT ROTATED OBJECTS
 
 float origin[8];
-float sidelength;
-This is the sidelength of the root node.
-
-The root node is immediately after the header.
-
-Node:
-
-int isLeaf;
-If isLeaf, then the following immediately follows:
-
-int color;
-
-Otherwise, the following immediately follows:
-
-int children[2 ** 8];
-The index of the node with minimum coordinates is 0, while changing the 2 **
-IND bit would change only the coordinate on axis IND.
-
-Each value in children in equal to childPtr - children, where childPtr is a
-pointer to the corresponding node.
+uint objDims[8];
+uint hashMapSize;
+uint hashMap[hashMapSize][8 + 1];
 
 */
-typedef struct StackEntry8 {
-
-  bool indexed;
-  __global uint *node;
-  size_t index;
-   float middle0;
-  float farEnd0;
-   float middle1;
-  float farEnd1;
-   float middle2;
-  float farEnd2;
-   float middle3;
-  float farEnd3;
-   float middle4;
-  float farEnd4;
-   float middle5;
-  float farEnd5;
-   float middle6;
-  float farEnd6;
-   float middle7;
-  float farEnd7;
-  
-} StackEntry8;
-
-void makeChild8(const StackEntry8 *parent, size_t index,
-                      StackEntry8 *child) {
-  child->indexed = false;
-  child->node = parent->node + 1 + parent->node[index + 1];
-   child->middle0 =
-      1.5f * parent->middle0 - 0.5f * parent->farEnd0 +
-      (((index >> 0) & 1) ^ (parent->farEnd0 < parent->middle0)) *
-          (parent->farEnd0 - parent->middle0);
-  child->farEnd0 =
-      child->middle0 + (parent->farEnd0 - parent->middle0) / 2;
-   child->middle1 =
-      1.5f * parent->middle1 - 0.5f * parent->farEnd1 +
-      (((index >> 1) & 1) ^ (parent->farEnd1 < parent->middle1)) *
-          (parent->farEnd1 - parent->middle1);
-  child->farEnd1 =
-      child->middle1 + (parent->farEnd1 - parent->middle1) / 2;
-   child->middle2 =
-      1.5f * parent->middle2 - 0.5f * parent->farEnd2 +
-      (((index >> 2) & 1) ^ (parent->farEnd2 < parent->middle2)) *
-          (parent->farEnd2 - parent->middle2);
-  child->farEnd2 =
-      child->middle2 + (parent->farEnd2 - parent->middle2) / 2;
-   child->middle3 =
-      1.5f * parent->middle3 - 0.5f * parent->farEnd3 +
-      (((index >> 3) & 1) ^ (parent->farEnd3 < parent->middle3)) *
-          (parent->farEnd3 - parent->middle3);
-  child->farEnd3 =
-      child->middle3 + (parent->farEnd3 - parent->middle3) / 2;
-   child->middle4 =
-      1.5f * parent->middle4 - 0.5f * parent->farEnd4 +
-      (((index >> 4) & 1) ^ (parent->farEnd4 < parent->middle4)) *
-          (parent->farEnd4 - parent->middle4);
-  child->farEnd4 =
-      child->middle4 + (parent->farEnd4 - parent->middle4) / 2;
-   child->middle5 =
-      1.5f * parent->middle5 - 0.5f * parent->farEnd5 +
-      (((index >> 5) & 1) ^ (parent->farEnd5 < parent->middle5)) *
-          (parent->farEnd5 - parent->middle5);
-  child->farEnd5 =
-      child->middle5 + (parent->farEnd5 - parent->middle5) / 2;
-   child->middle6 =
-      1.5f * parent->middle6 - 0.5f * parent->farEnd6 +
-      (((index >> 6) & 1) ^ (parent->farEnd6 < parent->middle6)) *
-          (parent->farEnd6 - parent->middle6);
-  child->farEnd6 =
-      child->middle6 + (parent->farEnd6 - parent->middle6) / 2;
-   child->middle7 =
-      1.5f * parent->middle7 - 0.5f * parent->farEnd7 +
-      (((index >> 7) & 1) ^ (parent->farEnd7 < parent->middle7)) *
-          (parent->farEnd7 - parent->middle7);
-  child->farEnd7 =
-      child->middle7 + (parent->farEnd7 - parent->middle7) / 2;
-  
-}
-
-bool traverseOctree8(__global uint *octree,
-                            float pos0, float dir0,
-                           float invdir0,  float pos1, float dir1,
-                           float invdir1,  float pos2, float dir2,
-                           float invdir2,  float pos3, float dir3,
-                           float invdir3,  float pos4, float dir4,
-                           float invdir4,  float pos5, float dir5,
-                           float invdir5,  float pos6, float dir6,
-                           float invdir6,  float pos7, float dir7,
-                           float invdir7, 
-                           __global uchar * img, __global float *dist) {
-  __global float *header = (__global float *)octree;
-   float origin0 = *header++;
-   float origin1 = *header++;
-   float origin2 = *header++;
-   float origin3 = *header++;
-   float origin4 = *header++;
-   float origin5 = *header++;
-   float origin6 = *header++;
-   float origin7 = *header++;
-  
-  float sidelength = *header++;
-  octree = (__global uint *)header;
-
-  float tminMax = 1e-8f;
-  float tmaxMin = FLT_MAX;
-   float t00 = (origin0 - pos0) * invdir0;
-  float t10 = (origin0 + sidelength - pos0) * invdir0;
-  tminMax = fmax(tminMax, fmin(t00, t10));
-  tmaxMin = fmin(tmaxMin, fmax(t00, t10));
-   float t01 = (origin1 - pos1) * invdir1;
-  float t11 = (origin1 + sidelength - pos1) * invdir1;
-  tminMax = fmax(tminMax, fmin(t01, t11));
-  tmaxMin = fmin(tmaxMin, fmax(t01, t11));
-   float t02 = (origin2 - pos2) * invdir2;
-  float t12 = (origin2 + sidelength - pos2) * invdir2;
-  tminMax = fmax(tminMax, fmin(t02, t12));
-  tmaxMin = fmin(tmaxMin, fmax(t02, t12));
-   float t03 = (origin3 - pos3) * invdir3;
-  float t13 = (origin3 + sidelength - pos3) * invdir3;
-  tminMax = fmax(tminMax, fmin(t03, t13));
-  tmaxMin = fmin(tmaxMin, fmax(t03, t13));
-   float t04 = (origin4 - pos4) * invdir4;
-  float t14 = (origin4 + sidelength - pos4) * invdir4;
-  tminMax = fmax(tminMax, fmin(t04, t14));
-  tmaxMin = fmin(tmaxMin, fmax(t04, t14));
-   float t05 = (origin5 - pos5) * invdir5;
-  float t15 = (origin5 + sidelength - pos5) * invdir5;
-  tminMax = fmax(tminMax, fmin(t05, t15));
-  tmaxMin = fmin(tmaxMin, fmax(t05, t15));
-   float t06 = (origin6 - pos6) * invdir6;
-  float t16 = (origin6 + sidelength - pos6) * invdir6;
-  tminMax = fmax(tminMax, fmin(t06, t16));
-  tmaxMin = fmin(tmaxMin, fmax(t06, t16));
-   float t07 = (origin7 - pos7) * invdir7;
-  float t17 = (origin7 + sidelength - pos7) * invdir7;
-  tminMax = fmax(tminMax, fmin(t07, t17));
-  tmaxMin = fmin(tmaxMin, fmax(t07, t17));
-  
-  if (tminMax >= tmaxMin) {
-    return false;
-  }
-
-  float currDist = tminMax + 1e-3f;
-   float currPos0 = pos0 + currDist * dir0;
-   float currPos1 = pos1 + currDist * dir1;
-   float currPos2 = pos2 + currDist * dir2;
-   float currPos3 = pos3 + currDist * dir3;
-   float currPos4 = pos4 + currDist * dir4;
-   float currPos5 = pos5 + currDist * dir5;
-   float currPos6 = pos6 + currDist * dir6;
-   float currPos7 = pos7 + currDist * dir7;
-  
-
-  StackEntry8 stack[12];
-  size_t stackInd = 0;
-  StackEntry8 baseEntry;
-  baseEntry.indexed = false;
-  baseEntry.node = octree;
-   baseEntry.middle0 = origin0 + sidelength / 2;
-  baseEntry.farEnd0 = origin0 + (invdir0 > 0) * sidelength;
-   baseEntry.middle1 = origin1 + sidelength / 2;
-  baseEntry.farEnd1 = origin1 + (invdir1 > 0) * sidelength;
-   baseEntry.middle2 = origin2 + sidelength / 2;
-  baseEntry.farEnd2 = origin2 + (invdir2 > 0) * sidelength;
-   baseEntry.middle3 = origin3 + sidelength / 2;
-  baseEntry.farEnd3 = origin3 + (invdir3 > 0) * sidelength;
-   baseEntry.middle4 = origin4 + sidelength / 2;
-  baseEntry.farEnd4 = origin4 + (invdir4 > 0) * sidelength;
-   baseEntry.middle5 = origin5 + sidelength / 2;
-  baseEntry.farEnd5 = origin5 + (invdir5 > 0) * sidelength;
-   baseEntry.middle6 = origin6 + sidelength / 2;
-  baseEntry.farEnd6 = origin6 + (invdir6 > 0) * sidelength;
-   baseEntry.middle7 = origin7 + sidelength / 2;
-  baseEntry.farEnd7 = origin7 + (invdir7 > 0) * sidelength;
-  
-  stack[stackInd++] = baseEntry;
-  bool debug = true;
-  __global float *distp = dist;
-  size_t i = 0;
-  while (stackInd && i < 100) {
-    i++;
-    StackEntry8 entry = stack[--stackInd];
-    /*
-    if (debug) {
-      printf("currDist: %f, entry.indexed: %i, entry.index: %lu\n", currDist,
-             (int)entry.indexed, entry.index);
-       printf(
-          "currPos0: %f, entry.middle0: %f, entry.farEnd0: %f\n",
-          currPos0, entry.middle0, entry.farEnd0);
-       printf(
-          "currPos1: %f, entry.middle1: %f, entry.farEnd1: %f\n",
-          currPos1, entry.middle1, entry.farEnd1);
-       printf(
-          "currPos2: %f, entry.middle2: %f, entry.farEnd2: %f\n",
-          currPos2, entry.middle2, entry.farEnd2);
-       printf(
-          "currPos3: %f, entry.middle3: %f, entry.farEnd3: %f\n",
-          currPos3, entry.middle3, entry.farEnd3);
-       printf(
-          "currPos4: %f, entry.middle4: %f, entry.farEnd4: %f\n",
-          currPos4, entry.middle4, entry.farEnd4);
-       printf(
-          "currPos5: %f, entry.middle5: %f, entry.farEnd5: %f\n",
-          currPos5, entry.middle5, entry.farEnd5);
-       printf(
-          "currPos6: %f, entry.middle6: %f, entry.farEnd6: %f\n",
-          currPos6, entry.middle6, entry.farEnd6);
-       printf(
-          "currPos7: %f, entry.middle7: %f, entry.farEnd7: %f\n",
-          currPos7, entry.middle7, entry.farEnd7);
-      
-      if (*entry.node) {
-        printf("Leaf node\n");
-      } else {
-        printf("\n");
-      }
-    }
-    */
-    /*
-    *distp++ = currDist;
-     *distp++ = currPos0;
-    *distp++ = invdir0;
-    *distp++ = entry.middle0;
-    *distp++ = entry.farEnd0;
-     *distp++ = currPos1;
-    *distp++ = invdir1;
-    *distp++ = entry.middle1;
-    *distp++ = entry.farEnd1;
-     *distp++ = currPos2;
-    *distp++ = invdir2;
-    *distp++ = entry.middle2;
-    *distp++ = entry.farEnd2;
-     *distp++ = currPos3;
-    *distp++ = invdir3;
-    *distp++ = entry.middle3;
-    *distp++ = entry.farEnd3;
-     *distp++ = currPos4;
-    *distp++ = invdir4;
-    *distp++ = entry.middle4;
-    *distp++ = entry.farEnd4;
-     *distp++ = currPos5;
-    *distp++ = invdir5;
-    *distp++ = entry.middle5;
-    *distp++ = entry.farEnd5;
-     *distp++ = currPos6;
-    *distp++ = invdir6;
-    *distp++ = entry.middle6;
-    *distp++ = entry.farEnd6;
-     *distp++ = currPos7;
-    *distp++ = invdir7;
-    *distp++ = entry.middle7;
-    *distp++ = entry.farEnd7;
-    
-    *distp++ = *entry.node;
-    *distp++ = stackInd;
-    */
-    if (*entry.node) {
-      // this is a leaf node
-      placeBehind(*(entry.node + 1), img);
-      if (*(img + 3) == 0xFF) {
-        *dist = currDist;
-        return true;
-      }
-      float minStep = FLT_MAX;
-       minStep =
-          fmin(minStep, (entry.farEnd0 - currPos0) * invdir0);
-       minStep =
-          fmin(minStep, (entry.farEnd1 - currPos1) * invdir1);
-       minStep =
-          fmin(minStep, (entry.farEnd2 - currPos2) * invdir2);
-       minStep =
-          fmin(minStep, (entry.farEnd3 - currPos3) * invdir3);
-       minStep =
-          fmin(minStep, (entry.farEnd4 - currPos4) * invdir4);
-       minStep =
-          fmin(minStep, (entry.farEnd5 - currPos5) * invdir5);
-       minStep =
-          fmin(minStep, (entry.farEnd6 - currPos6) * invdir6);
-       minStep =
-          fmin(minStep, (entry.farEnd7 - currPos7) * invdir7);
-      
-      if (minStep <= -1e-3f) {
-        continue;
-      }
-      currDist += minStep + 1e-3f;
-       currPos0 = pos0 + currDist * dir0;
-       currPos1 = pos1 + currDist * dir1;
-       currPos2 = pos2 + currDist * dir2;
-       currPos3 = pos3 + currDist * dir3;
-       currPos4 = pos4 + currDist * dir4;
-       currPos5 = pos5 + currDist * dir5;
-       currPos6 = pos6 + currDist * dir6;
-       currPos7 = pos7 + currDist * dir7;
-      
-    } else {
-      size_t newIndex = (
-                            ((currPos0 > entry.middle0) ||
-                             (currPos0 == entry.middle0 && (invdir0 > 0)))
-                            << 0) |
-                        (
-                            ((currPos1 > entry.middle1) ||
-                             (currPos1 == entry.middle1 && (invdir1 > 0)))
-                            << 1) |
-                        (
-                            ((currPos2 > entry.middle2) ||
-                             (currPos2 == entry.middle2 && (invdir2 > 0)))
-                            << 2) |
-                        (
-                            ((currPos3 > entry.middle3) ||
-                             (currPos3 == entry.middle3 && (invdir3 > 0)))
-                            << 3) |
-                        (
-                            ((currPos4 > entry.middle4) ||
-                             (currPos4 == entry.middle4 && (invdir4 > 0)))
-                            << 4) |
-                        (
-                            ((currPos5 > entry.middle5) ||
-                             (currPos5 == entry.middle5 && (invdir5 > 0)))
-                            << 5) |
-                        (
-                            ((currPos6 > entry.middle6) ||
-                             (currPos6 == entry.middle6 && (invdir6 > 0)))
-                            << 6) |
-                        (
-                            ((currPos7 > entry.middle7) ||
-                             (currPos7 == entry.middle7 && (invdir7 > 0)))
-                            << 7) |
-                        
-      0;
-      if (entry.indexed) {
-        size_t diffIndex = newIndex ^ entry.index;
-        if (diffIndex) {
-          entry.index = newIndex;
-          if (((entry.farEnd0 - currPos0) * invdir0 >
-                                 0) &&
-                  ((entry.farEnd1 - currPos1) * invdir1 >
-                                 0) &&
-                  ((entry.farEnd2 - currPos2) * invdir2 >
-                                 0) &&
-                  ((entry.farEnd3 - currPos3) * invdir3 >
-                                 0) &&
-                  ((entry.farEnd4 - currPos4) * invdir4 >
-                                 0) &&
-                  ((entry.farEnd5 - currPos5) * invdir5 >
-                                 0) &&
-                  ((entry.farEnd6 - currPos6) * invdir6 >
-                                 0) &&
-                  ((entry.farEnd7 - currPos7) * invdir7 >
-                                 0) &&
-                  
-              true) {
-            stack[stackInd++] = entry;
-          }
-          size_t tmpIndex = newIndex;
-          StackEntry8 child;
-           if ((1 << 0) & diffIndex) {
-            makeChild8(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 0);
-          }
-           if ((1 << 1) & diffIndex) {
-            makeChild8(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 1);
-          }
-           if ((1 << 2) & diffIndex) {
-            makeChild8(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 2);
-          }
-           if ((1 << 3) & diffIndex) {
-            makeChild8(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 3);
-          }
-           if ((1 << 4) & diffIndex) {
-            makeChild8(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 4);
-          }
-           if ((1 << 5) & diffIndex) {
-            makeChild8(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 5);
-          }
-           if ((1 << 6) & diffIndex) {
-            makeChild8(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 6);
-          }
-           if ((1 << 7) & diffIndex) {
-            makeChild8(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << 7);
-          }
-          
-          continue;
-        }
-      }
-      entry.index = newIndex;
-      entry.indexed = true;
-      if (((entry.farEnd0 - currPos0) * invdir0 > 0) &&
-              ((entry.farEnd1 - currPos1) * invdir1 > 0) &&
-              ((entry.farEnd2 - currPos2) * invdir2 > 0) &&
-              ((entry.farEnd3 - currPos3) * invdir3 > 0) &&
-              ((entry.farEnd4 - currPos4) * invdir4 > 0) &&
-              ((entry.farEnd5 - currPos5) * invdir5 > 0) &&
-              ((entry.farEnd6 - currPos6) * invdir6 > 0) &&
-              ((entry.farEnd7 - currPos7) * invdir7 > 0) &&
-              
-          true) {
-        stack[stackInd++] = entry;
-      }
-      StackEntry8 child;
-      makeChild8(&entry, entry.index, &child);
-      stack[stackInd++] = child;
-    }
-  }
-  return false;
-}
 
 bool rayBBox8( float pos0, float invdir0,
                     float min0, float max0,  float pos1, float invdir1,
@@ -3213,8 +2043,7 @@ bool rayBBox8( float pos0, float invdir0,
                     float min5, float max5,  float pos6, float invdir6,
                     float min6, float max6,  float pos7, float invdir7,
                     float min7, float max7, 
-                    int unused) {
-  (void)unused;
+                    float *dist) {
   // maximum of the lower bounds
   float tminMax = 1e-8f;
   // minimum of the upper bounds
@@ -3252,7 +2081,223 @@ bool rayBBox8( float pos0, float invdir0,
   tminMax = fmax(tminMax, fmin(t07, t17));
   tmaxMin = fmin(tmaxMin, fmax(t07, t17));
   
+  *dist = tminMax;
   return tminMax < tmaxMin;
+}
+
+uint grey8(float f) {
+  uint part = (f * 128.0) + 128.0;
+  return 0xFF | (part << 8) | (part << 16) | (part << 24);
+}
+
+bool traverseObject8(__global uint *object,
+                            float pos0, float dir0,
+                           float invdir0,  float pos1, float dir1,
+                           float invdir1,  float pos2, float dir2,
+                           float invdir2,  float pos3, float dir3,
+                           float invdir3,  float pos4, float dir4,
+                           float invdir4,  float pos5, float dir5,
+                           float invdir5,  float pos6, float dir6,
+                           float invdir6,  float pos7, float dir7,
+                           float invdir7, 
+                           __global uchar * img, __global float *dist,
+                           bool hasTerrain,  float scale0,
+                            float scale1,
+                            float scale2,
+                            float scale3,
+                            float scale4,
+                            float scale5,
+                            float scale6,
+                            float scale7,
+                           
+                           __global float *gradVecs, uint numGradVecs,
+                           uint numOctaves, float persistence) {
+  __global float *fobject = (__global float *)object;
+   float origin0 = *fobject++;
+   float origin1 = *fobject++;
+   float origin2 = *fobject++;
+   float origin3 = *fobject++;
+   float origin4 = *fobject++;
+   float origin5 = *fobject++;
+   float origin6 = *fobject++;
+   float origin7 = *fobject++;
+  
+  object = (__global uint *)fobject;
+   uint objDim0 = *object++;
+   uint objDim1 = *object++;
+   uint objDim2 = *object++;
+   uint objDim3 = *object++;
+   uint objDim4 = *object++;
+   uint objDim5 = *object++;
+   uint objDim6 = *object++;
+   uint objDim7 = *object++;
+  
+  uint hashMapSize = *object++;
+  uint maxHash = hashMapSize * (8 + 1);
+
+  float currDist;
+  if (!rayBBox8( pos0, invdir0, origin0,
+                      origin0 + objDim0,  pos1, invdir1, origin1,
+                      origin1 + objDim1,  pos2, invdir2, origin2,
+                      origin2 + objDim2,  pos3, invdir3, origin3,
+                      origin3 + objDim3,  pos4, invdir4, origin4,
+                      origin4 + objDim4,  pos5, invdir5, origin5,
+                      origin5 + objDim5,  pos6, invdir6, origin6,
+                      origin6 + objDim6,  pos7, invdir7, origin7,
+                      origin7 + objDim7, 
+                      &currDist)) {
+    return false;
+  }
+
+  currDist += 1e-3;
+   float currPos0 = pos0 + currDist * dir0;
+  int currBlock0 = fastFloor(currPos0 - origin0);
+  int dirdir0 = 2 * (invdir0 > 0) - 1;
+   float currPos1 = pos1 + currDist * dir1;
+  int currBlock1 = fastFloor(currPos1 - origin1);
+  int dirdir1 = 2 * (invdir1 > 0) - 1;
+   float currPos2 = pos2 + currDist * dir2;
+  int currBlock2 = fastFloor(currPos2 - origin2);
+  int dirdir2 = 2 * (invdir2 > 0) - 1;
+   float currPos3 = pos3 + currDist * dir3;
+  int currBlock3 = fastFloor(currPos3 - origin3);
+  int dirdir3 = 2 * (invdir3 > 0) - 1;
+   float currPos4 = pos4 + currDist * dir4;
+  int currBlock4 = fastFloor(currPos4 - origin4);
+  int dirdir4 = 2 * (invdir4 > 0) - 1;
+   float currPos5 = pos5 + currDist * dir5;
+  int currBlock5 = fastFloor(currPos5 - origin5);
+  int dirdir5 = 2 * (invdir5 > 0) - 1;
+   float currPos6 = pos6 + currDist * dir6;
+  int currBlock6 = fastFloor(currPos6 - origin6);
+  int dirdir6 = 2 * (invdir6 > 0) - 1;
+   float currPos7 = pos7 + currDist * dir7;
+  int currBlock7 = fastFloor(currPos7 - origin7);
+  int dirdir7 = 2 * (invdir7 > 0) - 1;
+  
+
+  if (get_global_id(0) == 400) {
+    //printf("%i\n", get_global_id(1));
+  }
+  while (true) {
+    // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
+    // currBlock0, currBlock1, currBlock2);
+    uint hashI =
+        (8 + 1) *
+        hash8( currBlock0,  currBlock1,  currBlock2,  currBlock3,  currBlock4,  currBlock5,  currBlock6,  currBlock7,  0, hashMapSize);
+    uint result;
+    while (true) {
+      if (!(result = object[hashI + 8])) {
+        break;
+      }
+      if ( currBlock0 == object[hashI + 0] &&  currBlock1 == object[hashI + 1] &&  currBlock2 == object[hashI + 2] &&  currBlock3 == object[hashI + 3] &&  currBlock4 == object[hashI + 4] &&  currBlock5 == object[hashI + 5] &&  currBlock6 == object[hashI + 6] &&  currBlock7 == object[hashI + 7] &&  true) {
+        break;
+      }
+      hashI += 8 + 1;
+      if (hashI >= maxHash) {
+        hashI = 0;
+      }
+    }
+    if (hasTerrain && !result) {
+      result = getNoise8(
+                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2,  scale3, origin3 + currBlock3,  scale4, origin4 + currBlock4,  scale5, origin5 + currBlock5,  scale6, origin6 + currBlock6,  scale7, origin7 + currBlock7, 
+                   gradVecs, numGradVecs, numOctaves, persistence) > 0
+                   ? grey8(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  currPos3 - origin3 - currBlock3 +  currPos4 - origin4 - currBlock4 +  currPos5 - origin5 - currBlock5 +  currPos6 - origin6 - currBlock6 +  currPos7 - origin7 - currBlock7 +  0.0) / 8)
+                   : 0;
+    }
+    placeBehind(result, img);
+    if (*(img + 3) == 0xFF) {
+      break;
+    }
+    float dist = INFINITY;
+     dist =
+        fmin(dist, invdir0 * (currBlock0 + (invdir0 > 0) -
+                                (currPos0 - origin0)));
+     dist =
+        fmin(dist, invdir1 * (currBlock1 + (invdir1 > 0) -
+                                (currPos1 - origin1)));
+     dist =
+        fmin(dist, invdir2 * (currBlock2 + (invdir2 > 0) -
+                                (currPos2 - origin2)));
+     dist =
+        fmin(dist, invdir3 * (currBlock3 + (invdir3 > 0) -
+                                (currPos3 - origin3)));
+     dist =
+        fmin(dist, invdir4 * (currBlock4 + (invdir4 > 0) -
+                                (currPos4 - origin4)));
+     dist =
+        fmin(dist, invdir5 * (currBlock5 + (invdir5 > 0) -
+                                (currPos5 - origin5)));
+     dist =
+        fmin(dist, invdir6 * (currBlock6 + (invdir6 > 0) -
+                                (currPos6 - origin6)));
+     dist =
+        fmin(dist, invdir7 * (currBlock7 + (invdir7 > 0) -
+                                (currPos7 - origin7)));
+    
+    dist = fmax(dist, 0);
+    currDist += dist + 1e-3;
+    int change;
+    uint changeMask = 0xFFFFFFFFU;
+     currPos0 = pos0 + currDist * dir0;
+    change = (fastFloor(currPos0 - origin0) - currBlock0) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock0 += change;
+    if (currBlock0 < 0 || currBlock0 >= (int)objDim0) {
+      break;
+    }
+     currPos1 = pos1 + currDist * dir1;
+    change = (fastFloor(currPos1 - origin1) - currBlock1) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock1 += change;
+    if (currBlock1 < 0 || currBlock1 >= (int)objDim1) {
+      break;
+    }
+     currPos2 = pos2 + currDist * dir2;
+    change = (fastFloor(currPos2 - origin2) - currBlock2) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock2 += change;
+    if (currBlock2 < 0 || currBlock2 >= (int)objDim2) {
+      break;
+    }
+     currPos3 = pos3 + currDist * dir3;
+    change = (fastFloor(currPos3 - origin3) - currBlock3) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock3 += change;
+    if (currBlock3 < 0 || currBlock3 >= (int)objDim3) {
+      break;
+    }
+     currPos4 = pos4 + currDist * dir4;
+    change = (fastFloor(currPos4 - origin4) - currBlock4) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock4 += change;
+    if (currBlock4 < 0 || currBlock4 >= (int)objDim4) {
+      break;
+    }
+     currPos5 = pos5 + currDist * dir5;
+    change = (fastFloor(currPos5 - origin5) - currBlock5) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock5 += change;
+    if (currBlock5 < 0 || currBlock5 >= (int)objDim5) {
+      break;
+    }
+     currPos6 = pos6 + currDist * dir6;
+    change = (fastFloor(currPos6 - origin6) - currBlock6) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock6 += change;
+    if (currBlock6 < 0 || currBlock6 >= (int)objDim6) {
+      break;
+    }
+     currPos7 = pos7 + currDist * dir7;
+    change = (fastFloor(currPos7 - origin7) - currBlock7) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlock7 += change;
+    if (currBlock7 < 0 || currBlock7 >= (int)objDim7) {
+      break;
+    }
+    
+  }
+  return false;
 }
 
 bool traverseBVH8(__global uint *bvh,  float pos0,
@@ -3264,7 +2309,10 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
                         float dir5, float invdir5,  float pos6,
                         float dir6, float invdir6,  float pos7,
                         float dir7, float invdir7, 
-                        __global uchar * img, __global float *dist) {
+                        __global uchar * img, __global float *dist,
+                         float scale0,  float scale1,  float scale2,  float scale3,  float scale4,  float scale5,  float scale6,  float scale7, 
+                        __global float *gradVecs, uint numGradVecs,
+                        uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[8];
@@ -3281,6 +2329,7 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
   __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
+  float spam;
   while (stackInd) {
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
@@ -3302,21 +2351,24 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
     float max7 = *floatBVH++;
     
     if (!rayBBox8(
-             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  pos6, invdir6, min6, max6,  pos7, invdir7, min7, max7,  0)) {
+             pos0, invdir0, min0, max0,  pos1, invdir1, min1, max1,  pos2, invdir2, min2, max2,  pos3, invdir3, min3, max3,  pos4, invdir4, min4, max4,  pos5, invdir5, min5, max5,  pos6, invdir6, min6, max6,  pos7, invdir7, min7, max7,  &spam)) {
       continue;
     }
     currBvh = (__global uint *)floatBVH;
-    if (*currBvh++) {
-      if (traverseOctree8(currBvh + *currBvh,  pos0,
-                                dir0, invdir0,  pos1,
-                                dir1, invdir1,  pos2,
-                                dir2, invdir2,  pos3,
-                                dir3, invdir3,  pos4,
-                                dir4, invdir4,  pos5,
-                                dir5, invdir5,  pos6,
-                                dir6, invdir6,  pos7,
-                                dir7, invdir7, 
-                                img, dist)) {
+    uint objType = *currBvh++;
+    if (objType) {
+      if (traverseObject8(
+              currBvh + *currBvh,  pos0, dir0, invdir0,
+               pos1, dir1, invdir1,
+               pos2, dir2, invdir2,
+               pos3, dir3, invdir3,
+               pos4, dir4, invdir4,
+               pos5, dir5, invdir5,
+               pos6, dir6, invdir6,
+               pos7, dir7, invdir7,
+              
+              img, dist, objType - 1,  scale0,  scale1,  scale2,  scale3,  scale4,  scale5,  scale6,  scale7, 
+              gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -3342,7 +2394,9 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
 __kernel void renderStd8(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
-                               __global float *dist) {
+                               __global float *dist, __global float *scale,
+                               __global float *gradVecs, uint numGradVecs,
+                               uint numOctaves, float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -3405,7 +2459,8 @@ __kernel void renderStd8(__global uint *bvh, __global float *pos,
   img += 4 * posIndex;
   dist += posIndex;
   traverseBVH8(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5,  pos6, dir6, invdir6,  pos7, dir7, invdir7, 
-                     img, dist);
+                     img, dist,  scale[0],  scale[1],  scale[2],  scale[3],  scale[4],  scale[5],  scale[6],  scale[7], 
+                     gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 )OPENCLPP"

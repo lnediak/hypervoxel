@@ -188,6 +188,10 @@ struct RenderKernel {
   cl::Buffer bvh;
   cl::Buffer pos, forward, right, up;
   cl::Buffer img, dist;
+  cl::Buffer scale;
+  cl::Buffer gradVecs;
+  cl_uint numGradVecs, numOctaves;
+  cl_float persistence;
   cl::Kernel kernel;
 
   cl::Event run(const ClStuff &clStuff, std::size_t tmpWidth = -1,
@@ -205,6 +209,11 @@ struct RenderKernel {
       kernel.setArg(4, up);
       kernel.setArg(5, img);
       kernel.setArg(6, dist);
+      kernel.setArg(7, scale);
+      kernel.setArg(8, gradVecs);
+      kernel.setArg(9, numGradVecs);
+      kernel.setArg(10, numOctaves);
+      kernel.setArg(11, persistence);
       cl::Event toreturn;
       clStuff.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
                                          cl::NDRange(tmpWidth, tmpHeight),
@@ -266,6 +275,31 @@ struct RenderKernel {
     }
   }
 
+  void writeScale(const ClStuff &clStuff, cl_float *scalePtr) {
+    try {
+      clStuff.queue.enqueueWriteBuffer(scale, true, 0,
+                                       sizeof(cl_float) * numDims, scalePtr);
+    } catch (const cl::Error &err) {
+      throw std::runtime_error(getClErrorString(err));
+    }
+  }
+
+  void writeGradVecs(const ClStuff &clStuff, cl_float *gradVecsPtr,
+                     std::size_t newNumGradVecs) {
+    try {
+      if (newNumGradVecs != numGradVecs) {
+        gradVecs = cl::Buffer(clStuff.context, CL_MEM_READ_ONLY,
+                              sizeof(cl_float) * numDims * newNumGradVecs);
+      }
+      numGradVecs = newNumGradVecs;
+      clStuff.queue.enqueueWriteBuffer(gradVecs, true, 0,
+                                       sizeof(cl_float) * numDims * numGradVecs,
+                                       gradVecsPtr);
+    } catch (const cl::Error &err) {
+      throw std::runtime_error(getClErrorString(err));
+    }
+  }
+
   void readImg(const ClStuff &clStuff, cl_uchar *imgPtr, cl_float *distPtr) {
     try {
       if (imgPtr) {
@@ -284,10 +318,13 @@ struct RenderKernel {
 
 inline RenderKernel compileRenderKernel(const ClStuff &clStuff,
                                         std::size_t numDims, std::size_t bvhLen,
-                                        std::size_t width, std::size_t height) {
+                                        std::size_t width, std::size_t height,
+                                        cl_uint numGradVecs, cl_uint numOctaves,
+                                        float persistence) {
   try {
     cl::Program::Sources src;
     std::string code =
+#include "terrain.cl.inc"
 #include "main.cl.inc"
         ;
     src.push_back({code.c_str(), code.size()});
@@ -303,18 +340,25 @@ inline RenderKernel compileRenderKernel(const ClStuff &clStuff,
     std::stringstream ss;
     ss << "renderStd" << numDims;
     std::size_t numPixels = width * height;
-    return {numDims,
-            bvhLen,
-            width,
-            height,
-            {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_uint) * bvhLen},
-            {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
-            {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
-            {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
-            {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
-            {clStuff.context, CL_MEM_READ_WRITE, sizeof(cl_uchar) * 4 * numPixels},
-            {clStuff.context, CL_MEM_WRITE_ONLY, sizeof(cl_float) * numPixels},
-            {prog, ss.str().c_str()}};
+    return {
+        numDims,
+        bvhLen,
+        width,
+        height,
+        {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_uint) * bvhLen},
+        {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
+        {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
+        {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
+        {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
+        {clStuff.context, CL_MEM_READ_WRITE, sizeof(cl_uchar) * 4 * numPixels},
+        {clStuff.context, CL_MEM_WRITE_ONLY, sizeof(cl_float) * numPixels},
+        {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
+        {clStuff.context, CL_MEM_READ_ONLY,
+         sizeof(cl_float) * numDims * numGradVecs},
+        numGradVecs,
+        numOctaves,
+        persistence,
+        {prog, ss.str().c_str()}};
   } catch (const cl::Error &err) {
     throw std::runtime_error(getClErrorString(err));
   }

@@ -1,20 +1,24 @@
 #ifndef NON_REP_
 #define NON_REP_
 
-uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha, uchar combinedAlpha) {
-  return (front * frontAlpha + ((back >> bitshift) & 0xFF) * (255 - frontAlpha) * (back & 0xFF) / 255.0f) / combinedAlpha;
+uchar mergeColorChannel(uint back, int bitshift, uchar front, uchar frontAlpha,
+                        uchar combinedAlpha) {
+  return (front * frontAlpha + ((back >> bitshift) & 0xFF) *
+                                   (255 - frontAlpha) * (back & 0xFF) /
+                                   255.0f) /
+         combinedAlpha;
 }
 
 void placeBehind(uint color, __global uchar *img) {
   uchar frontAlpha = *(img + 3);
-  uchar combinedAlpha = frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
+  uchar combinedAlpha =
+      frontAlpha + (color & 0xFF) * (255 - frontAlpha) / 255.0f;
   *img = mergeColorChannel(color, 24, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 16, *img, frontAlpha, combinedAlpha);
   img++;
   *img = mergeColorChannel(color, 8, *img, frontAlpha, combinedAlpha);
-  img++;
-  *img = combinedAlpha;
+  *++img = combinedAlpha;
 }
 
 #endif // NON_REP_
@@ -23,14 +27,14 @@ void placeBehind(uint color, __global uchar *img) {
 BVH format:
 
 float minmax[NUMDIMS][2];
-int isOctree;
+int objType;
 
-The struct is different for leaf nodes (nodes where isOctree). The rest of the
-struct for a leaf node is as follows:
+The struct is different for leaf nodes (nodes where objType > 0). The rest of
+the struct for a leaf node is as follows:
 
-int octree;
-This is the value of octreePtr - &octree, where octreePtr is a pointer to the
-octree.
+int obj;
+This is the value of objPtr - &obj, where objPtr is a pointer to the
+object.
 
 The rest of the struct for a non-leaf node is as follows:
 
@@ -48,186 +52,19 @@ each other. Along this axis, left must be on the left of right.
 
 
 
-Octree format:
-// TODO: IMPLEMENT ROTATED OCTREES
-
-Header:
+Object format:
+// TODO: IMPLEMENT ROTATED OBJECTS
 
 float origin[NUMDIMS];
-float sidelength;
-This is the sidelength of the root node.
-
-The root node is immediately after the header.
-
-Node:
-
-int isLeaf;
-If isLeaf, then the following immediately follows:
-
-int color;
-
-Otherwise, the following immediately follows:
-
-int children[2 ** NUMDIMS];
-The index of the node with minimum coordinates is 0, while changing the 2 **
-IND bit would change only the coordinate on axis IND.
-
-Each value in children in equal to childPtr - children, where childPtr is a
-pointer to the corresponding node.
+uint objDims[NUMDIMS];
+uint hashMapSize;
+uint hashMap[hashMapSize][NUMDIMS + 1];
 
 */
-typedef struct StackEntryNUMDIMS {
-
-  bool indexed;
-  __global uint *node;
-  size_t index;
-  REPEAT IND NUMDIMS float middleIND;
-  float farEndIND;
-  END;
-} StackEntryNUMDIMS;
-
-void makeChildNUMDIMS(const StackEntryNUMDIMS *parent, size_t index,
-                      StackEntryNUMDIMS *child) {
-  child->indexed = false;
-  child->node = parent->node + 1 + parent->node[index + 1];
-  REPEAT IND NUMDIMS child->middleIND =
-      1.5f * parent->middleIND - 0.5f * parent->farEndIND +
-      (((index >> IND) & 1) ^ (parent->farEndIND < parent->middleIND)) *
-          (parent->farEndIND - parent->middleIND);
-  child->farEndIND =
-      child->middleIND + (parent->farEndIND - parent->middleIND) / 2;
-  END;
-}
-
-bool traverseOctreeNUMDIMS(__global uint *octree,
-                           REPEAT IND NUMDIMS float posIND, float dirIND,
-                           float invdirIND, END;
-                           __global uchar * img, __global float *dist) {
-  __global float *header = (__global float *)octree;
-  REPEAT IND NUMDIMS float originIND = *header++;
-  END;
-  float sidelength = *header++;
-  octree = (__global uint *)header;
-
-  float tminMax = 1e-8f;
-  float tmaxMin = FLT_MAX;
-  REPEAT IND NUMDIMS float t0IND = (originIND - posIND) * invdirIND;
-  float t1IND = (originIND + sidelength - posIND) * invdirIND;
-  tminMax = fmax(tminMax, fmin(t0IND, t1IND));
-  tmaxMin = fmin(tmaxMin, fmax(t0IND, t1IND));
-  END;
-  if (tminMax >= tmaxMin) {
-    return false;
-  }
-
-  float currDist = tminMax + 1e-3f;
-  REPEAT IND NUMDIMS float currPosIND = posIND + currDist * dirIND;
-  END;
-
-  StackEntryNUMDIMS stack[12];
-  size_t stackInd = 0;
-  StackEntryNUMDIMS baseEntry;
-  baseEntry.indexed = false;
-  baseEntry.node = octree;
-  REPEAT IND NUMDIMS baseEntry.middleIND = originIND + sidelength / 2;
-  baseEntry.farEndIND = originIND + (invdirIND > 0) * sidelength;
-  END;
-  stack[stackInd++] = baseEntry;
-  bool debug = true;
-  __global float *distp = dist;
-  size_t i = 0;
-  while (stackInd && i < 100) {
-    i++;
-    StackEntryNUMDIMS entry = stack[--stackInd];
-    /*
-    if (debug) {
-      printf("currDist: %f, entry.indexed: %i, entry.index: %lu\n", currDist,
-             (int)entry.indexed, entry.index);
-      REPEAT IND NUMDIMS printf(
-          "currPosIND: %f, entry.middleIND: %f, entry.farEndIND: %f\n",
-          currPosIND, entry.middleIND, entry.farEndIND);
-      END;
-      if (*entry.node) {
-        printf("Leaf node\n");
-      } else {
-        printf("\n");
-      }
-    }
-    */
-    /*
-    *distp++ = currDist;
-    REPEAT IND NUMDIMS *distp++ = currPosIND;
-    *distp++ = invdirIND;
-    *distp++ = entry.middleIND;
-    *distp++ = entry.farEndIND;
-    END;
-    *distp++ = *entry.node;
-    *distp++ = stackInd;
-    */
-    if (*entry.node) {
-      // this is a leaf node
-      placeBehind(*(entry.node + 1), img);
-      if (*(img + 3) == 0xFF) {
-        *dist = currDist;
-        return true;
-      }
-      float minStep = FLT_MAX;
-      REPEAT IND NUMDIMS minStep =
-          fmin(minStep, (entry.farEndIND - currPosIND) * invdirIND);
-      END;
-      if (minStep <= -1e-3f) {
-        continue;
-      }
-      currDist += minStep + 1e-3f;
-      REPEAT IND NUMDIMS currPosIND = posIND + currDist * dirIND;
-      END;
-    } else {
-      size_t newIndex = REPEAT IND NUMDIMS(
-                            ((currPosIND > entry.middleIND) ||
-                             (currPosIND == entry.middleIND && (invdirIND > 0)))
-                            << IND) |
-                        END;
-      0;
-      if (entry.indexed) {
-        size_t diffIndex = newIndex ^ entry.index;
-        if (diffIndex) {
-          entry.index = newIndex;
-          if (REPEAT IND NUMDIMS((entry.farEndIND - currPosIND) * invdirIND >
-                                 0) &&
-                  END;
-              true) {
-            stack[stackInd++] = entry;
-          }
-          size_t tmpIndex = newIndex;
-          StackEntryNUMDIMS child;
-          REPEAT IND NUMDIMS if ((1 << IND) & diffIndex) {
-            makeChildNUMDIMS(&entry, tmpIndex, &child);
-            stack[stackInd++] = child;
-            tmpIndex ^= (1 << IND);
-          }
-          END;
-          continue;
-        }
-      }
-      entry.index = newIndex;
-      entry.indexed = true;
-      if (REPEAT IND NUMDIMS((entry.farEndIND - currPosIND) * invdirIND > 0) &&
-              END;
-          true) {
-        stack[stackInd++] = entry;
-      }
-      StackEntryNUMDIMS child;
-      makeChildNUMDIMS(&entry, entry.index, &child);
-      stack[stackInd++] = child;
-    }
-  }
-  return false;
-}
 
 bool rayBBoxNUMDIMS(REPEAT IND NUMDIMS float posIND, float invdirIND,
                     float minIND, float maxIND, END;
-                    int unused) {
-  (void)unused;
+                    float *dist) {
   // maximum of the lower bounds
   float tminMax = 1e-8f;
   // minimum of the upper bounds
@@ -237,12 +74,105 @@ bool rayBBoxNUMDIMS(REPEAT IND NUMDIMS float posIND, float invdirIND,
   tminMax = fmax(tminMax, fmin(t0IND, t1IND));
   tmaxMin = fmin(tmaxMin, fmax(t0IND, t1IND));
   END;
+  *dist = tminMax;
   return tminMax < tmaxMin;
+}
+
+uint greyNUMDIMS(float f) {
+  uint part = (f * 128.0) + 128.0;
+  return 0xFF | (part << 8) | (part << 16) | (part << 24);
+}
+
+bool traverseObjectNUMDIMS(__global uint *object,
+                           REPEAT IND NUMDIMS float posIND, float dirIND,
+                           float invdirIND, END;
+                           __global uchar * img, __global float *dist,
+                           bool hasTerrain, REPEAT IND NUMDIMS float scaleIND,
+                           END;
+                           __global float *gradVecs, uint numGradVecs,
+                           uint numOctaves, float persistence) {
+  __global float *fobject = (__global float *)object;
+  REPEAT IND NUMDIMS float originIND = *fobject++;
+  END;
+  object = (__global uint *)fobject;
+  REPEAT IND NUMDIMS uint objDimIND = *object++;
+  END;
+  uint hashMapSize = *object++;
+  uint maxHash = hashMapSize * (NUMDIMS + 1);
+
+  float currDist;
+  if (!rayBBoxNUMDIMS(REPEAT IND NUMDIMS posIND, invdirIND, originIND,
+                      originIND + objDimIND, END;
+                      &currDist)) {
+    return false;
+  }
+
+  currDist += 1e-3;
+  REPEAT IND NUMDIMS float currPosIND = posIND + currDist * dirIND;
+  int currBlockIND = fastFloor(currPosIND - originIND);
+  int dirdirIND = 2 * (invdirIND > 0) - 1;
+  END;
+
+  if (get_global_id(0) == 400) {
+    //printf("%i\n", get_global_id(1));
+  }
+  while (true) {
+    // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
+    // currBlock0, currBlock1, currBlock2);
+    uint hashI =
+        (NUMDIMS + 1) *
+        hashNUMDIMS(REPEAT IND NUMDIMS currBlockIND, END; 0, hashMapSize);
+    uint result;
+    while (true) {
+      if (!(result = object[hashI + NUMDIMS])) {
+        break;
+      }
+      if (REPEAT IND NUMDIMS currBlockIND == object[hashI + IND] && END; true) {
+        break;
+      }
+      hashI += NUMDIMS + 1;
+      if (hashI >= maxHash) {
+        hashI = 0;
+      }
+    }
+    if (hasTerrain && !result) {
+      result = getNoiseNUMDIMS(
+                   REPEAT IND NUMDIMS scaleIND, originIND + currBlockIND, END;
+                   gradVecs, numGradVecs, numOctaves, persistence) > 0
+                   ? greyNUMDIMS((REPEAT IND NUMDIMS currPosIND - originIND - currBlockIND + END; 0.0) / NUMDIMS)
+                   : 0;
+    }
+    placeBehind(result, img);
+    if (*(img + 3) == 0xFF) {
+      break;
+    }
+    float dist = INFINITY;
+    REPEAT IND NUMDIMS dist =
+        fmin(dist, invdirIND * (currBlockIND + (invdirIND > 0) -
+                                (currPosIND - originIND)));
+    END;
+    dist = fmax(dist, 0);
+    currDist += dist + 1e-3;
+    int change;
+    uint changeMask = 0xFFFFFFFFU;
+    REPEAT IND NUMDIMS currPosIND = posIND + currDist * dirIND;
+    change = (fastFloor(currPosIND - originIND) - currBlockIND) & changeMask;
+    changeMask = ~changeMask | ((change > 0) - 1);
+    currBlockIND += change;
+    if (currBlockIND < 0 || currBlockIND >= (int)objDimIND) {
+      break;
+    }
+    END;
+  }
+  return false;
 }
 
 bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
                         float dirIND, float invdirIND, END;
-                        __global uchar * img, __global float *dist) {
+                        __global uchar * img, __global float *dist,
+                        REPEAT IND NUMDIMS float scaleIND, END;
+                        __global float *gradVecs, uint numGradVecs,
+                        uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[NUMDIMS];
@@ -252,6 +182,7 @@ bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
   __global uint *stack[24];
   size_t stackInd = 0;
   stack[stackInd++] = bvh;
+  float spam;
   while (stackInd) {
     __global uint *currBvh = stack[--stackInd];
     __global float *floatBVH = (__global float *)currBvh;
@@ -259,14 +190,17 @@ bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
     float maxIND = *floatBVH++;
     END;
     if (!rayBBoxNUMDIMS(
-            REPEAT IND NUMDIMS posIND, invdirIND, minIND, maxIND, END; 0)) {
+            REPEAT IND NUMDIMS posIND, invdirIND, minIND, maxIND, END; &spam)) {
       continue;
     }
     currBvh = (__global uint *)floatBVH;
-    if (*currBvh++) {
-      if (traverseOctreeNUMDIMS(currBvh + *currBvh, REPEAT IND NUMDIMS posIND,
-                                dirIND, invdirIND, END;
-                                img, dist)) {
+    uint objType = *currBvh++;
+    if (objType) {
+      if (traverseObjectNUMDIMS(
+              currBvh + *currBvh, REPEAT IND NUMDIMS posIND, dirIND, invdirIND,
+              END;
+              img, dist, objType - 1, REPEAT IND NUMDIMS scaleIND, END;
+              gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -292,7 +226,9 @@ bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
 __kernel void renderStdNUMDIMS(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
-                               __global float *dist) {
+                               __global float *dist, __global float *scale,
+                               __global float *gradVecs, uint numGradVecs,
+                               uint numOctaves, float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -320,6 +256,7 @@ __kernel void renderStdNUMDIMS(__global uint *bvh, __global float *pos,
   img += 4 * posIndex;
   dist += posIndex;
   traverseBVHNUMDIMS(bvh, REPEAT IND NUMDIMS posIND, dirIND, invdirIND, END;
-                     img, dist);
+                     img, dist, REPEAT IND NUMDIMS scale[IND], END;
+                     gradVecs, numGradVecs, numOctaves, persistence);
 }
 

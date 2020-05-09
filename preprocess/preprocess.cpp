@@ -141,7 +141,7 @@ Text nextChunk(const std::string &text, std::size_t &i, bool expandRepeats) {
           std::size_t ind = 0;
           while ((ind = repeC.find(indVar.text, ind)) != std::string::npos) {
             repeC.replace(ind, indVar.text.size(), indexS);
-            ind += indVar.text.size();
+            ind += indexS.size();
           }
           std::size_t subI = 0;
           while (true) {
@@ -195,12 +195,12 @@ Text nextChunk(const std::string &text, std::size_t &i, bool expandRepeats) {
           std::size_t ind = 0;
           while ((ind = repeC.find(indVar.text, ind)) != std::string::npos) {
             repeC.replace(ind, indVar.text.size(), indexS);
-            ind += indVar.text.size();
+            ind += indexS.size();
           }
           ind = 0;
           while ((ind = repeC.find(invVar.text, ind)) != std::string::npos) {
             repeC.replace(ind, invVar.text.size(), invS);
-            ind += invVar.text.size();
+            ind += invS.size();
           }
           std::size_t subI = 0;
           while (true) {
@@ -256,7 +256,7 @@ Text nextChunk(const std::string &text, std::size_t &i, bool expandRepeats) {
           std::size_t ind = 0;
           while ((ind = repeC.find(bitsVar.text, ind)) != std::string::npos) {
             repeC.replace(ind, bitsVar.text.size(), indexS);
-            ind += bitsVar.text.size();
+            ind += indexS.size();
           }
           std::stringstream expansion;
           std::size_t subI = 0;
@@ -275,7 +275,7 @@ Text nextChunk(const std::string &text, std::size_t &i, bool expandRepeats) {
             ind = 0;
             while ((ind = expS.find(rand.str(), ind)) != std::string::npos) {
               expS.replace(ind, rand.str().size(), std::string(1, indexS[ii]));
-              ind += rand.str().size();
+              ind += 1;
             }
           }
           subI = 0;
