@@ -89,8 +89,9 @@ bool traverseObjectNUMDIMS(__global uint *object,
                            __global uchar * img, __global float *dist,
                            bool hasTerrain, REPEAT IND NUMDIMS float scaleIND,
                            END;
-                           __global float *gradVecs, uint numGradVecs,
-                           uint numOctaves, float persistence) {
+                           float lerpSlen, __global float *gradVecs,
+                           uint numGradVecs, uint numOctaves,
+                           float persistence) {
   __global float *fobject = (__global float *)object;
   REPEAT IND NUMDIMS float originIND = *fobject++;
   END;
@@ -113,9 +114,8 @@ bool traverseObjectNUMDIMS(__global uint *object,
   int dirdirIND = 2 * (invdirIND > 0) - 1;
   END;
 
-  if (get_global_id(0) == 400) {
-    //printf("%i\n", get_global_id(1));
-  }
+  TerrainDataNUMDIMS terrainData;
+  initTerrainDataNUMDIMS(&terrainData);
   while (true) {
     // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
     // currBlock0, currBlock1, currBlock2);
@@ -131,15 +131,17 @@ bool traverseObjectNUMDIMS(__global uint *object,
         break;
       }
       hashI += NUMDIMS + 1;
-      if (hashI >= maxHash) {
-        hashI = 0;
-      }
+      hashI &= (hashI >= maxHash) - 1;
     }
     if (hasTerrain && !result) {
-      result = getNoiseNUMDIMS(
-                   REPEAT IND NUMDIMS scaleIND, originIND + currBlockIND, END;
-                   gradVecs, numGradVecs, numOctaves, persistence) > 0
-                   ? greyNUMDIMS((REPEAT IND NUMDIMS currPosIND - originIND - currBlockIND + END; 0.0) / NUMDIMS)
+      result = getNoiseNUMDIMS(REPEAT IND NUMDIMS scaleIND,
+                               originIND + currBlockIND, END;
+                               lerpSlen, gradVecs, numGradVecs, numOctaves,
+                               persistence, &terrainData) > 0
+                   ? greyNUMDIMS((REPEAT IND NUMDIMS currPosIND - originIND -
+                                      currBlockIND + END;
+                                  0.0) /
+                                 NUMDIMS)
                    : 0;
     }
     placeBehind(result, img);
@@ -171,8 +173,8 @@ bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
                         float dirIND, float invdirIND, END;
                         __global uchar * img, __global float *dist,
                         REPEAT IND NUMDIMS float scaleIND, END;
-                        __global float *gradVecs, uint numGradVecs,
-                        uint numOctaves, float persistence) {
+                        float lerpSlen, __global float *gradVecs,
+                        uint numGradVecs, uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[NUMDIMS];
@@ -200,7 +202,7 @@ bool traverseBVHNUMDIMS(__global uint *bvh, REPEAT IND NUMDIMS float posIND,
               currBvh + *currBvh, REPEAT IND NUMDIMS posIND, dirIND, invdirIND,
               END;
               img, dist, objType - 1, REPEAT IND NUMDIMS scaleIND, END;
-              gradVecs, numGradVecs, numOctaves, persistence)) {
+              lerpSlen, gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -227,8 +229,9 @@ __kernel void renderStdNUMDIMS(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
                                __global float *dist, __global float *scale,
-                               __global float *gradVecs, uint numGradVecs,
-                               uint numOctaves, float persistence) {
+                               float lerpSlen, __global float *gradVecs,
+                               uint numGradVecs, uint numOctaves,
+                               float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -257,6 +260,6 @@ __kernel void renderStdNUMDIMS(__global uint *bvh, __global float *pos,
   dist += posIndex;
   traverseBVHNUMDIMS(bvh, REPEAT IND NUMDIMS posIND, dirIND, invdirIND, END;
                      img, dist, REPEAT IND NUMDIMS scale[IND], END;
-                     gradVecs, numGradVecs, numOctaves, persistence);
+                     lerpSlen, gradVecs, numGradVecs, numOctaves, persistence);
 }
 

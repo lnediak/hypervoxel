@@ -2,6 +2,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -20,11 +21,9 @@ std::string dumpFile(const std::string &filename) {
   return ss.str();
 }
 
-#define MAX_UINT 1000000000
-
 unsigned int strToUInt(const std::string &str, std::size_t &i) {
   std::size_t len = str.size();
-  unsigned int toreturn = 0;
+  unsigned long long toreturn = 0;
   std::size_t ind = i;
   std::size_t origI = i;
   if (i >= len) {
@@ -39,10 +38,10 @@ unsigned int strToUInt(const std::string &str, std::size_t &i) {
         break;
       }
     }
-    if (toreturn >= MAX_UINT / 10) {
+    toreturn = 10 * toreturn + c - '0';
+    if (toreturn > std::numeric_limits<unsigned int>::max()) {
       throw std::runtime_error(" is out of range");
     }
-    toreturn = 10 * toreturn + c - '0';
   }
   i = ind;
   return toreturn;
@@ -117,7 +116,8 @@ Text nextChunk(const std::string &text, std::size_t &i, bool expandRepeats) {
       }
       i -= countS.text.size();
       std::size_t tmp = 0;
-      unsigned int count = strToUInt(countS.text, tmp);
+      unsigned int count = expandRepeats ? strToUInt(countS.text, tmp)
+                                         : (tmp = countS.text.size(), 0);
       i += tmp;
       std::stringstream repeContent;
       while (true) {
@@ -168,7 +168,8 @@ Text nextChunk(const std::string &text, std::size_t &i, bool expandRepeats) {
       }
       i -= countS.text.size();
       std::size_t tmp = 0;
-      unsigned int count = strToUInt(countS.text, tmp);
+      unsigned int count = expandRepeats ? strToUInt(countS.text, tmp)
+                                         : (tmp = countS.text.size(), 0);
       i += tmp;
       std::stringstream repeContent;
       while (true) {
@@ -227,7 +228,8 @@ Text nextChunk(const std::string &text, std::size_t &i, bool expandRepeats) {
       }
       i -= dimsS.text.size();
       std::size_t tmp = 0;
-      unsigned int dims = expandRepeats? strToUInt(dimsS.text, tmp) : (tmp = dimsS.text.size(), 0);
+      unsigned int dims = expandRepeats ? strToUInt(dimsS.text, tmp)
+                                        : (tmp = dimsS.text.size(), 0);
       if (dims >= 24) {
         throw std::runtime_error("count is out of range in REPEAT2 statement");
       }
@@ -287,6 +289,37 @@ Text nextChunk(const std::string &text, std::size_t &i, bool expandRepeats) {
             ss << nt.text;
           }
         }
+      } else {
+        ss << text.substr(origI, i - origI);
+      }
+      continue;
+    } else if (t.text.size() >= 3 &&
+               !t.text.compare(t.text.size() - 3, 3, "SUB")) {
+      ss << t.text.substr(0, t.text.size() - 3);
+      std::size_t origI = i - 3;
+      std::stringstream content;
+      while (true) {
+        Text nt = nextChunk(text, i, expandRepeats);
+        if (nt.type == TextType::end) {
+          throw std::runtime_error("Reached EOF during REPEAT statement");
+        }
+        if (nt.text.size() && !nt.text.compare(0, 4, "END;")) {
+          i -= nt.text.size() - 4;
+          break;
+        } else {
+          content << nt.text;
+        }
+      }
+      if (expandRepeats) {
+        std::size_t tmpi = 0;
+        std::string contentS = content.str();
+        Text firstS = (nextWord(contentS, tmpi), nextWord(contentS, tmpi));
+        Text secondS = (nextWord(contentS, tmpi), nextWord(contentS, tmpi));
+        std::size_t tmp = 0;
+        unsigned int first = strToUInt(firstS.text, tmp);
+        tmp = 0;
+        unsigned int second = strToUInt(secondS.text, tmp);
+        ss << first - second;
       } else {
         ss << text.substr(origI, i - origI);
       }

@@ -4,6 +4,7 @@
 #include <memory>
 #include <random>
 #include <time.h>
+#include <signal.h>
 #include <unistd.h>
 
 std::unique_ptr<cl_float[]> getGradVecs(unsigned numGradVecs,
@@ -59,13 +60,13 @@ int main() {
     *object++ = 0; // hashMap
   }
   RenderKernel kernel = compileRenderKernel(clStuff, numDims, 1048576, width,
-                                            height, 4096, 3, 0.5);
+                                            height, 0.0875, 4096, 3, 0.5);
   kernel.writeBvh(clStuff, bvh, 1048576);
   cl_float pos[] = {32, 32, -40};
   cl_float forward[] = {0, 0, 1};
   cl_float right[] = {1, 0, 0};
   cl_float up[] = {0, 1, 0};
-  cl_float scale[] = {64, 64, 64};
+  cl_float scale[] = {256, 256, 256};
   kernel.writePos(clStuff, pos);
   kernel.writeForward(clStuff, forward);
   kernel.writeRight(clStuff, right);
@@ -121,21 +122,27 @@ int main() {
       std::cout << std::endl << std::endl;
     } */
     cl::Event ev = kernel.run(clStuff, width, height);
-    ev.wait();
-    for (std::size_t i = 10; i--;) {
-      sleep(2);
-      if (ev.getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>() != CL_RUNNING) {
-        std::cout << "Not running anymore!" << std::endl;
+    bool success = false;
+    for (std::size_t i = 30; i--;) {
+      sleep(1);
+      if (ev.getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>() == CL_COMPLETE) {
+        std::cout << "Success!" << std::endl;
+        success = true;
         break;
       }
     }
-    std::cout << "Time's up!" << std::endl;
+    if (!success) {
+      std::cout << "Time's up!" << std::endl;
+      exit(SIGTERM);
+    }
     //throw std::runtime_error("Owned");
   } catch (const cl::Error &err) {
     throw std::runtime_error(getClErrorString(err));
   }
   std::vector<unsigned char> imgVec(width * height * 4);
+  std::cout << "Reading image" << std::endl;
   kernel.readImg(clStuff, &imgVec[0], nullptr);
+  std::cout << "Writing image" << std::endl;
   unsigned error = lodepng::encode("out.png", imgVec, width, height);
   if (error) {
     throw std::runtime_error(lodepng_error_text(error));

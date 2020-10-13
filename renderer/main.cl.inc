@@ -105,8 +105,9 @@ bool traverseObject3(__global uint *object,
                             float scale1,
                             float scale2,
                            
-                           __global float *gradVecs, uint numGradVecs,
-                           uint numOctaves, float persistence) {
+                           float lerpSlen, __global float *gradVecs,
+                           uint numGradVecs, uint numOctaves,
+                           float persistence) {
   __global float *fobject = (__global float *)object;
    float origin0 = *fobject++;
    float origin1 = *fobject++;
@@ -141,9 +142,8 @@ bool traverseObject3(__global uint *object,
   int dirdir2 = 2 * (invdir2 > 0) - 1;
   
 
-  if (get_global_id(0) == 400) {
-    //printf("%i\n", get_global_id(1));
-  }
+  TerrainData3 terrainData;
+  initTerrainData3(&terrainData);
   while (true) {
     // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
     // currBlock0, currBlock1, currBlock2);
@@ -159,15 +159,21 @@ bool traverseObject3(__global uint *object,
         break;
       }
       hashI += 3 + 1;
-      if (hashI >= maxHash) {
-        hashI = 0;
-      }
+      hashI &= (hashI >= maxHash) - 1;
     }
     if (hasTerrain && !result) {
-      result = getNoise3(
-                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2, 
-                   gradVecs, numGradVecs, numOctaves, persistence) > 0
-                   ? grey3(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  0.0) / 3)
+      result = getNoise3( scale0,
+                               origin0 + currBlock0,  scale1,
+                               origin1 + currBlock1,  scale2,
+                               origin2 + currBlock2, 
+                               lerpSlen, gradVecs, numGradVecs, numOctaves,
+                               persistence, &terrainData) > 0
+                   ? grey3(( currPos0 - origin0 -
+                                      currBlock0 +  currPos1 - origin1 -
+                                      currBlock1 +  currPos2 - origin2 -
+                                      currBlock2 + 
+                                  0.0) /
+                                 3)
                    : 0;
     }
     placeBehind(result, img);
@@ -221,8 +227,8 @@ bool traverseBVH3(__global uint *bvh,  float pos0,
                         float dir2, float invdir2, 
                         __global uchar * img, __global float *dist,
                          float scale0,  float scale1,  float scale2, 
-                        __global float *gradVecs, uint numGradVecs,
-                        uint numOctaves, float persistence) {
+                        float lerpSlen, __global float *gradVecs,
+                        uint numGradVecs, uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[3];
@@ -258,7 +264,7 @@ bool traverseBVH3(__global uint *bvh,  float pos0,
                pos2, dir2, invdir2,
               
               img, dist, objType - 1,  scale0,  scale1,  scale2, 
-              gradVecs, numGradVecs, numOctaves, persistence)) {
+              lerpSlen, gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -285,8 +291,9 @@ __kernel void renderStd3(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
                                __global float *dist, __global float *scale,
-                               __global float *gradVecs, uint numGradVecs,
-                               uint numOctaves, float persistence) {
+                               float lerpSlen, __global float *gradVecs,
+                               uint numGradVecs, uint numOctaves,
+                               float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -325,7 +332,7 @@ __kernel void renderStd3(__global uint *bvh, __global float *pos,
   dist += posIndex;
   traverseBVH3(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2, 
                      img, dist,  scale[0],  scale[1],  scale[2], 
-                     gradVecs, numGradVecs, numOctaves, persistence);
+                     lerpSlen, gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 #ifndef NON_REP_
@@ -440,8 +447,9 @@ bool traverseObject4(__global uint *object,
                             float scale2,
                             float scale3,
                            
-                           __global float *gradVecs, uint numGradVecs,
-                           uint numOctaves, float persistence) {
+                           float lerpSlen, __global float *gradVecs,
+                           uint numGradVecs, uint numOctaves,
+                           float persistence) {
   __global float *fobject = (__global float *)object;
    float origin0 = *fobject++;
    float origin1 = *fobject++;
@@ -482,9 +490,8 @@ bool traverseObject4(__global uint *object,
   int dirdir3 = 2 * (invdir3 > 0) - 1;
   
 
-  if (get_global_id(0) == 400) {
-    //printf("%i\n", get_global_id(1));
-  }
+  TerrainData4 terrainData;
+  initTerrainData4(&terrainData);
   while (true) {
     // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
     // currBlock0, currBlock1, currBlock2);
@@ -500,15 +507,23 @@ bool traverseObject4(__global uint *object,
         break;
       }
       hashI += 4 + 1;
-      if (hashI >= maxHash) {
-        hashI = 0;
-      }
+      hashI &= (hashI >= maxHash) - 1;
     }
     if (hasTerrain && !result) {
-      result = getNoise4(
-                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2,  scale3, origin3 + currBlock3, 
-                   gradVecs, numGradVecs, numOctaves, persistence) > 0
-                   ? grey4(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  currPos3 - origin3 - currBlock3 +  0.0) / 4)
+      result = getNoise4( scale0,
+                               origin0 + currBlock0,  scale1,
+                               origin1 + currBlock1,  scale2,
+                               origin2 + currBlock2,  scale3,
+                               origin3 + currBlock3, 
+                               lerpSlen, gradVecs, numGradVecs, numOctaves,
+                               persistence, &terrainData) > 0
+                   ? grey4(( currPos0 - origin0 -
+                                      currBlock0 +  currPos1 - origin1 -
+                                      currBlock1 +  currPos2 - origin2 -
+                                      currBlock2 +  currPos3 - origin3 -
+                                      currBlock3 + 
+                                  0.0) /
+                                 4)
                    : 0;
     }
     placeBehind(result, img);
@@ -573,8 +588,8 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
                         float dir3, float invdir3, 
                         __global uchar * img, __global float *dist,
                          float scale0,  float scale1,  float scale2,  float scale3, 
-                        __global float *gradVecs, uint numGradVecs,
-                        uint numOctaves, float persistence) {
+                        float lerpSlen, __global float *gradVecs,
+                        uint numGradVecs, uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[4];
@@ -614,7 +629,7 @@ bool traverseBVH4(__global uint *bvh,  float pos0,
                pos3, dir3, invdir3,
               
               img, dist, objType - 1,  scale0,  scale1,  scale2,  scale3, 
-              gradVecs, numGradVecs, numOctaves, persistence)) {
+              lerpSlen, gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -641,8 +656,9 @@ __kernel void renderStd4(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
                                __global float *dist, __global float *scale,
-                               __global float *gradVecs, uint numGradVecs,
-                               uint numOctaves, float persistence) {
+                               float lerpSlen, __global float *gradVecs,
+                               uint numGradVecs, uint numOctaves,
+                               float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -686,7 +702,7 @@ __kernel void renderStd4(__global uint *bvh, __global float *pos,
   dist += posIndex;
   traverseBVH4(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3, 
                      img, dist,  scale[0],  scale[1],  scale[2],  scale[3], 
-                     gradVecs, numGradVecs, numOctaves, persistence);
+                     lerpSlen, gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 #ifndef NON_REP_
@@ -808,8 +824,9 @@ bool traverseObject5(__global uint *object,
                             float scale3,
                             float scale4,
                            
-                           __global float *gradVecs, uint numGradVecs,
-                           uint numOctaves, float persistence) {
+                           float lerpSlen, __global float *gradVecs,
+                           uint numGradVecs, uint numOctaves,
+                           float persistence) {
   __global float *fobject = (__global float *)object;
    float origin0 = *fobject++;
    float origin1 = *fobject++;
@@ -856,9 +873,8 @@ bool traverseObject5(__global uint *object,
   int dirdir4 = 2 * (invdir4 > 0) - 1;
   
 
-  if (get_global_id(0) == 400) {
-    //printf("%i\n", get_global_id(1));
-  }
+  TerrainData5 terrainData;
+  initTerrainData5(&terrainData);
   while (true) {
     // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
     // currBlock0, currBlock1, currBlock2);
@@ -874,15 +890,25 @@ bool traverseObject5(__global uint *object,
         break;
       }
       hashI += 5 + 1;
-      if (hashI >= maxHash) {
-        hashI = 0;
-      }
+      hashI &= (hashI >= maxHash) - 1;
     }
     if (hasTerrain && !result) {
-      result = getNoise5(
-                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2,  scale3, origin3 + currBlock3,  scale4, origin4 + currBlock4, 
-                   gradVecs, numGradVecs, numOctaves, persistence) > 0
-                   ? grey5(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  currPos3 - origin3 - currBlock3 +  currPos4 - origin4 - currBlock4 +  0.0) / 5)
+      result = getNoise5( scale0,
+                               origin0 + currBlock0,  scale1,
+                               origin1 + currBlock1,  scale2,
+                               origin2 + currBlock2,  scale3,
+                               origin3 + currBlock3,  scale4,
+                               origin4 + currBlock4, 
+                               lerpSlen, gradVecs, numGradVecs, numOctaves,
+                               persistence, &terrainData) > 0
+                   ? grey5(( currPos0 - origin0 -
+                                      currBlock0 +  currPos1 - origin1 -
+                                      currBlock1 +  currPos2 - origin2 -
+                                      currBlock2 +  currPos3 - origin3 -
+                                      currBlock3 +  currPos4 - origin4 -
+                                      currBlock4 + 
+                                  0.0) /
+                                 5)
                    : 0;
     }
     placeBehind(result, img);
@@ -958,8 +984,8 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
                         float dir4, float invdir4, 
                         __global uchar * img, __global float *dist,
                          float scale0,  float scale1,  float scale2,  float scale3,  float scale4, 
-                        __global float *gradVecs, uint numGradVecs,
-                        uint numOctaves, float persistence) {
+                        float lerpSlen, __global float *gradVecs,
+                        uint numGradVecs, uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[5];
@@ -1003,7 +1029,7 @@ bool traverseBVH5(__global uint *bvh,  float pos0,
                pos4, dir4, invdir4,
               
               img, dist, objType - 1,  scale0,  scale1,  scale2,  scale3,  scale4, 
-              gradVecs, numGradVecs, numOctaves, persistence)) {
+              lerpSlen, gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -1030,8 +1056,9 @@ __kernel void renderStd5(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
                                __global float *dist, __global float *scale,
-                               __global float *gradVecs, uint numGradVecs,
-                               uint numOctaves, float persistence) {
+                               float lerpSlen, __global float *gradVecs,
+                               uint numGradVecs, uint numOctaves,
+                               float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -1080,7 +1107,7 @@ __kernel void renderStd5(__global uint *bvh, __global float *pos,
   dist += posIndex;
   traverseBVH5(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4, 
                      img, dist,  scale[0],  scale[1],  scale[2],  scale[3],  scale[4], 
-                     gradVecs, numGradVecs, numOctaves, persistence);
+                     lerpSlen, gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 #ifndef NON_REP_
@@ -1209,8 +1236,9 @@ bool traverseObject6(__global uint *object,
                             float scale4,
                             float scale5,
                            
-                           __global float *gradVecs, uint numGradVecs,
-                           uint numOctaves, float persistence) {
+                           float lerpSlen, __global float *gradVecs,
+                           uint numGradVecs, uint numOctaves,
+                           float persistence) {
   __global float *fobject = (__global float *)object;
    float origin0 = *fobject++;
    float origin1 = *fobject++;
@@ -1263,9 +1291,8 @@ bool traverseObject6(__global uint *object,
   int dirdir5 = 2 * (invdir5 > 0) - 1;
   
 
-  if (get_global_id(0) == 400) {
-    //printf("%i\n", get_global_id(1));
-  }
+  TerrainData6 terrainData;
+  initTerrainData6(&terrainData);
   while (true) {
     // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
     // currBlock0, currBlock1, currBlock2);
@@ -1281,15 +1308,27 @@ bool traverseObject6(__global uint *object,
         break;
       }
       hashI += 6 + 1;
-      if (hashI >= maxHash) {
-        hashI = 0;
-      }
+      hashI &= (hashI >= maxHash) - 1;
     }
     if (hasTerrain && !result) {
-      result = getNoise6(
-                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2,  scale3, origin3 + currBlock3,  scale4, origin4 + currBlock4,  scale5, origin5 + currBlock5, 
-                   gradVecs, numGradVecs, numOctaves, persistence) > 0
-                   ? grey6(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  currPos3 - origin3 - currBlock3 +  currPos4 - origin4 - currBlock4 +  currPos5 - origin5 - currBlock5 +  0.0) / 6)
+      result = getNoise6( scale0,
+                               origin0 + currBlock0,  scale1,
+                               origin1 + currBlock1,  scale2,
+                               origin2 + currBlock2,  scale3,
+                               origin3 + currBlock3,  scale4,
+                               origin4 + currBlock4,  scale5,
+                               origin5 + currBlock5, 
+                               lerpSlen, gradVecs, numGradVecs, numOctaves,
+                               persistence, &terrainData) > 0
+                   ? grey6(( currPos0 - origin0 -
+                                      currBlock0 +  currPos1 - origin1 -
+                                      currBlock1 +  currPos2 - origin2 -
+                                      currBlock2 +  currPos3 - origin3 -
+                                      currBlock3 +  currPos4 - origin4 -
+                                      currBlock4 +  currPos5 - origin5 -
+                                      currBlock5 + 
+                                  0.0) /
+                                 6)
                    : 0;
     }
     placeBehind(result, img);
@@ -1376,8 +1415,8 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
                         float dir5, float invdir5, 
                         __global uchar * img, __global float *dist,
                          float scale0,  float scale1,  float scale2,  float scale3,  float scale4,  float scale5, 
-                        __global float *gradVecs, uint numGradVecs,
-                        uint numOctaves, float persistence) {
+                        float lerpSlen, __global float *gradVecs,
+                        uint numGradVecs, uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[6];
@@ -1425,7 +1464,7 @@ bool traverseBVH6(__global uint *bvh,  float pos0,
                pos5, dir5, invdir5,
               
               img, dist, objType - 1,  scale0,  scale1,  scale2,  scale3,  scale4,  scale5, 
-              gradVecs, numGradVecs, numOctaves, persistence)) {
+              lerpSlen, gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -1452,8 +1491,9 @@ __kernel void renderStd6(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
                                __global float *dist, __global float *scale,
-                               __global float *gradVecs, uint numGradVecs,
-                               uint numOctaves, float persistence) {
+                               float lerpSlen, __global float *gradVecs,
+                               uint numGradVecs, uint numOctaves,
+                               float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -1507,7 +1547,7 @@ __kernel void renderStd6(__global uint *bvh, __global float *pos,
   dist += posIndex;
   traverseBVH6(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5, 
                      img, dist,  scale[0],  scale[1],  scale[2],  scale[3],  scale[4],  scale[5], 
-                     gradVecs, numGradVecs, numOctaves, persistence);
+                     lerpSlen, gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 #ifndef NON_REP_
@@ -1643,8 +1683,9 @@ bool traverseObject7(__global uint *object,
                             float scale5,
                             float scale6,
                            
-                           __global float *gradVecs, uint numGradVecs,
-                           uint numOctaves, float persistence) {
+                           float lerpSlen, __global float *gradVecs,
+                           uint numGradVecs, uint numOctaves,
+                           float persistence) {
   __global float *fobject = (__global float *)object;
    float origin0 = *fobject++;
    float origin1 = *fobject++;
@@ -1703,9 +1744,8 @@ bool traverseObject7(__global uint *object,
   int dirdir6 = 2 * (invdir6 > 0) - 1;
   
 
-  if (get_global_id(0) == 400) {
-    //printf("%i\n", get_global_id(1));
-  }
+  TerrainData7 terrainData;
+  initTerrainData7(&terrainData);
   while (true) {
     // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
     // currBlock0, currBlock1, currBlock2);
@@ -1721,15 +1761,29 @@ bool traverseObject7(__global uint *object,
         break;
       }
       hashI += 7 + 1;
-      if (hashI >= maxHash) {
-        hashI = 0;
-      }
+      hashI &= (hashI >= maxHash) - 1;
     }
     if (hasTerrain && !result) {
-      result = getNoise7(
-                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2,  scale3, origin3 + currBlock3,  scale4, origin4 + currBlock4,  scale5, origin5 + currBlock5,  scale6, origin6 + currBlock6, 
-                   gradVecs, numGradVecs, numOctaves, persistence) > 0
-                   ? grey7(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  currPos3 - origin3 - currBlock3 +  currPos4 - origin4 - currBlock4 +  currPos5 - origin5 - currBlock5 +  currPos6 - origin6 - currBlock6 +  0.0) / 7)
+      result = getNoise7( scale0,
+                               origin0 + currBlock0,  scale1,
+                               origin1 + currBlock1,  scale2,
+                               origin2 + currBlock2,  scale3,
+                               origin3 + currBlock3,  scale4,
+                               origin4 + currBlock4,  scale5,
+                               origin5 + currBlock5,  scale6,
+                               origin6 + currBlock6, 
+                               lerpSlen, gradVecs, numGradVecs, numOctaves,
+                               persistence, &terrainData) > 0
+                   ? grey7(( currPos0 - origin0 -
+                                      currBlock0 +  currPos1 - origin1 -
+                                      currBlock1 +  currPos2 - origin2 -
+                                      currBlock2 +  currPos3 - origin3 -
+                                      currBlock3 +  currPos4 - origin4 -
+                                      currBlock4 +  currPos5 - origin5 -
+                                      currBlock5 +  currPos6 - origin6 -
+                                      currBlock6 + 
+                                  0.0) /
+                                 7)
                    : 0;
     }
     placeBehind(result, img);
@@ -1827,8 +1881,8 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
                         float dir6, float invdir6, 
                         __global uchar * img, __global float *dist,
                          float scale0,  float scale1,  float scale2,  float scale3,  float scale4,  float scale5,  float scale6, 
-                        __global float *gradVecs, uint numGradVecs,
-                        uint numOctaves, float persistence) {
+                        float lerpSlen, __global float *gradVecs,
+                        uint numGradVecs, uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[7];
@@ -1880,7 +1934,7 @@ bool traverseBVH7(__global uint *bvh,  float pos0,
                pos6, dir6, invdir6,
               
               img, dist, objType - 1,  scale0,  scale1,  scale2,  scale3,  scale4,  scale5,  scale6, 
-              gradVecs, numGradVecs, numOctaves, persistence)) {
+              lerpSlen, gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -1907,8 +1961,9 @@ __kernel void renderStd7(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
                                __global float *dist, __global float *scale,
-                               __global float *gradVecs, uint numGradVecs,
-                               uint numOctaves, float persistence) {
+                               float lerpSlen, __global float *gradVecs,
+                               uint numGradVecs, uint numOctaves,
+                               float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -1967,7 +2022,7 @@ __kernel void renderStd7(__global uint *bvh, __global float *pos,
   dist += posIndex;
   traverseBVH7(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5,  pos6, dir6, invdir6, 
                      img, dist,  scale[0],  scale[1],  scale[2],  scale[3],  scale[4],  scale[5],  scale[6], 
-                     gradVecs, numGradVecs, numOctaves, persistence);
+                     lerpSlen, gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 #ifndef NON_REP_
@@ -2110,8 +2165,9 @@ bool traverseObject8(__global uint *object,
                             float scale6,
                             float scale7,
                            
-                           __global float *gradVecs, uint numGradVecs,
-                           uint numOctaves, float persistence) {
+                           float lerpSlen, __global float *gradVecs,
+                           uint numGradVecs, uint numOctaves,
+                           float persistence) {
   __global float *fobject = (__global float *)object;
    float origin0 = *fobject++;
    float origin1 = *fobject++;
@@ -2176,9 +2232,8 @@ bool traverseObject8(__global uint *object,
   int dirdir7 = 2 * (invdir7 > 0) - 1;
   
 
-  if (get_global_id(0) == 400) {
-    //printf("%i\n", get_global_id(1));
-  }
+  TerrainData8 terrainData;
+  initTerrainData8(&terrainData);
   while (true) {
     // printf("%i %i %i %i %i\n", get_global_id(0), get_global_id(1),
     // currBlock0, currBlock1, currBlock2);
@@ -2194,15 +2249,31 @@ bool traverseObject8(__global uint *object,
         break;
       }
       hashI += 8 + 1;
-      if (hashI >= maxHash) {
-        hashI = 0;
-      }
+      hashI &= (hashI >= maxHash) - 1;
     }
     if (hasTerrain && !result) {
-      result = getNoise8(
-                    scale0, origin0 + currBlock0,  scale1, origin1 + currBlock1,  scale2, origin2 + currBlock2,  scale3, origin3 + currBlock3,  scale4, origin4 + currBlock4,  scale5, origin5 + currBlock5,  scale6, origin6 + currBlock6,  scale7, origin7 + currBlock7, 
-                   gradVecs, numGradVecs, numOctaves, persistence) > 0
-                   ? grey8(( currPos0 - origin0 - currBlock0 +  currPos1 - origin1 - currBlock1 +  currPos2 - origin2 - currBlock2 +  currPos3 - origin3 - currBlock3 +  currPos4 - origin4 - currBlock4 +  currPos5 - origin5 - currBlock5 +  currPos6 - origin6 - currBlock6 +  currPos7 - origin7 - currBlock7 +  0.0) / 8)
+      result = getNoise8( scale0,
+                               origin0 + currBlock0,  scale1,
+                               origin1 + currBlock1,  scale2,
+                               origin2 + currBlock2,  scale3,
+                               origin3 + currBlock3,  scale4,
+                               origin4 + currBlock4,  scale5,
+                               origin5 + currBlock5,  scale6,
+                               origin6 + currBlock6,  scale7,
+                               origin7 + currBlock7, 
+                               lerpSlen, gradVecs, numGradVecs, numOctaves,
+                               persistence, &terrainData) > 0
+                   ? grey8(( currPos0 - origin0 -
+                                      currBlock0 +  currPos1 - origin1 -
+                                      currBlock1 +  currPos2 - origin2 -
+                                      currBlock2 +  currPos3 - origin3 -
+                                      currBlock3 +  currPos4 - origin4 -
+                                      currBlock4 +  currPos5 - origin5 -
+                                      currBlock5 +  currPos6 - origin6 -
+                                      currBlock6 +  currPos7 - origin7 -
+                                      currBlock7 + 
+                                  0.0) /
+                                 8)
                    : 0;
     }
     placeBehind(result, img);
@@ -2311,8 +2382,8 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
                         float dir7, float invdir7, 
                         __global uchar * img, __global float *dist,
                          float scale0,  float scale1,  float scale2,  float scale3,  float scale4,  float scale5,  float scale6,  float scale7, 
-                        __global float *gradVecs, uint numGradVecs,
-                        uint numOctaves, float persistence) {
+                        float lerpSlen, __global float *gradVecs,
+                        uint numGradVecs, uint numOctaves, float persistence) {
   *img = *(img + 1) = *(img + 2) = *(img + 3) = 0;
   *dist = -1;
   float invdirArr[8];
@@ -2368,7 +2439,7 @@ bool traverseBVH8(__global uint *bvh,  float pos0,
                pos7, dir7, invdir7,
               
               img, dist, objType - 1,  scale0,  scale1,  scale2,  scale3,  scale4,  scale5,  scale6,  scale7, 
-              gradVecs, numGradVecs, numOctaves, persistence)) {
+              lerpSlen, gradVecs, numGradVecs, numOctaves, persistence)) {
         return true;
       }
       continue;
@@ -2395,8 +2466,9 @@ __kernel void renderStd8(__global uint *bvh, __global float *pos,
                                __global float *forward, __global float *right,
                                __global float *up, __global uchar *img,
                                __global float *dist, __global float *scale,
-                               __global float *gradVecs, uint numGradVecs,
-                               uint numOctaves, float persistence) {
+                               float lerpSlen, __global float *gradVecs,
+                               uint numGradVecs, uint numOctaves,
+                               float persistence) {
   size_t row = get_global_id(0);
   size_t col = get_global_id(1);
   size_t height = get_global_size(0);
@@ -2460,7 +2532,7 @@ __kernel void renderStd8(__global uint *bvh, __global float *pos,
   dist += posIndex;
   traverseBVH8(bvh,  pos0, dir0, invdir0,  pos1, dir1, invdir1,  pos2, dir2, invdir2,  pos3, dir3, invdir3,  pos4, dir4, invdir4,  pos5, dir5, invdir5,  pos6, dir6, invdir6,  pos7, dir7, invdir7, 
                      img, dist,  scale[0],  scale[1],  scale[2],  scale[3],  scale[4],  scale[5],  scale[6],  scale[7], 
-                     gradVecs, numGradVecs, numOctaves, persistence);
+                     lerpSlen, gradVecs, numGradVecs, numOctaves, persistence);
 }
 
 )OPENCLPP"
