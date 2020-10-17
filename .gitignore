@@ -3,4 +3,6 @@ preprocess/pp
 renderer/test_cl
 renderer/out.png
 renderer/out.jpg
+renderer/main.cl.inc
+renderer/terrain.cl.inc
 

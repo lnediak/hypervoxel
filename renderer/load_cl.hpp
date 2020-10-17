@@ -189,7 +189,6 @@ struct RenderKernel {
   cl::Buffer pos, forward, right, up;
   cl::Buffer img, dist;
   cl::Buffer scale;
-  cl_float lerpSlen;
   cl::Buffer gradVecs;
   cl_uint numGradVecs, numOctaves;
   cl_float persistence;
@@ -211,11 +210,10 @@ struct RenderKernel {
       kernel.setArg(5, img);
       kernel.setArg(6, dist);
       kernel.setArg(7, scale);
-      kernel.setArg(8, lerpSlen);
-      kernel.setArg(9, gradVecs);
-      kernel.setArg(10, numGradVecs);
-      kernel.setArg(11, numOctaves);
-      kernel.setArg(12, persistence);
+      kernel.setArg(8, gradVecs);
+      kernel.setArg(9, numGradVecs);
+      kernel.setArg(10, numOctaves);
+      kernel.setArg(11, persistence);
       cl::Event toreturn;
       clStuff.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
                                          cl::NDRange(tmpWidth, tmpHeight),
@@ -321,8 +319,8 @@ struct RenderKernel {
 inline RenderKernel compileRenderKernel(const ClStuff &clStuff,
                                         std::size_t numDims, std::size_t bvhLen,
                                         std::size_t width, std::size_t height,
-                                        cl_float lerpSlen, cl_uint numGradVecs,
-                                        cl_uint numOctaves, float persistence) {
+                                        cl_uint numGradVecs, cl_uint numOctaves,
+                                        float persistence) {
   try {
     cl::Program::Sources src;
     std::string code =
@@ -355,7 +353,6 @@ inline RenderKernel compileRenderKernel(const ClStuff &clStuff,
         {clStuff.context, CL_MEM_READ_WRITE, sizeof(cl_uchar) * 4 * numPixels},
         {clStuff.context, CL_MEM_WRITE_ONLY, sizeof(cl_float) * numPixels},
         {clStuff.context, CL_MEM_READ_ONLY, sizeof(cl_float) * numDims},
-        lerpSlen,
         {clStuff.context, CL_MEM_READ_ONLY,
          sizeof(cl_float) * numDims * numGradVecs},
         numGradVecs,

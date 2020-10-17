@@ -18,5 +18,5 @@ terrain.cl.inc: terrain.cl.pp
 .PHONY: clean
 
 clean:
-	rm main.cl.inc terrain.cl.inc test_cl.o lodepng/lodepng.o test_cl
+	rm -f main.cl.inc terrain.cl.inc test_cl.o lodepng/lodepng.o test_cl
 

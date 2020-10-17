@@ -42,7 +42,7 @@ int main() {
   cl_float *currBvhF = reinterpret_cast<cl_float *>(bvh);
   for (std::size_t i = 0; i < numDims; i++) {
     *currBvhF++ = 0;  // min
-    *currBvhF++ = 64; // max
+    *currBvhF++ = 512; // max
   }
   cl_uint *currBvh = reinterpret_cast<cl_uint *>(currBvhF);
   *currBvh++ = 2; // objType
@@ -53,16 +53,16 @@ int main() {
   }
   cl_uint *object = reinterpret_cast<cl_uint *>(objectF);
   for (std::size_t i = 0; i < numDims; i++) {
-    *object++ = 64; // objDims
+    *object++ = 512; // objDims
   }
   *object++ = 1; // hashMapSize
   for (std::size_t i = 0; i <= numDims; i++) {
     *object++ = 0; // hashMap
   }
   RenderKernel kernel = compileRenderKernel(clStuff, numDims, 1048576, width,
-                                            height, 0.0875, 4096, 3, 0.5);
+                                            height, 4096, 3, 0.5);
   kernel.writeBvh(clStuff, bvh, 1048576);
-  cl_float pos[] = {32, 32, -40};
+  cl_float pos[] = {256, 256, -80};
   cl_float forward[] = {0, 0, 1};
   cl_float right[] = {1, 0, 0};
   cl_float up[] = {0, 1, 0};
@@ -123,7 +123,7 @@ int main() {
     } */
     cl::Event ev = kernel.run(clStuff, width, height);
     bool success = false;
-    for (std::size_t i = 30; i--;) {
+    for (std::size_t i = 60; i--;) {
       sleep(1);
       if (ev.getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>() == CL_COMPLETE) {
         std::cout << "Success!" << std::endl;
