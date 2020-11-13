@@ -25,9 +25,18 @@ template <class T> class PoolLinkedList {
   }
 
 public:
-  LinkedList(std::size_t maxSize)
+  PoolLinkedList(std::size_t maxSize)
       : pool(new Node[maxSize + 1]), stack(new std::size_t[maxSize]),
         ind(maxSize), head(pool.get()) {
+    for (std::size_t i = maxSize; i--;) {
+      stack[i] = i + 1;
+    }
+    head->prev = head;
+    head->next = head;
+  }
+
+  void clear() {
+    ind = maxSize;
     for (std::size_t i = maxSize; i--;) {
       stack[i] = i + 1;
     }
