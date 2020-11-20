@@ -1,6 +1,8 @@
 #ifndef HYPERVOXEL_POOL_LINKED_LIST_HPP_
 #define HYPERVOXEL_POOL_LINKED_LIST_HPP_
 
+#include <memory>
+
 namespace hypervoxel {
 
 /**
@@ -9,9 +11,18 @@ namespace hypervoxel {
 */
 template <class T> class PoolLinkedList {
 
+public:
+  struct Node {
+
+    T obj;
+    Node *prev;
+    Node *next;
+  };
+
+private:
   std::unique_ptr<Node[]> pool;
   std::unique_ptr<std::size_t[]> stack;
-  std::size_t ind;
+  std::size_t ind, maxSize;
   Node *head;
 
   Node *fetchFromPool() {
@@ -27,8 +38,17 @@ template <class T> class PoolLinkedList {
 public:
   PoolLinkedList(std::size_t maxSize)
       : pool(new Node[maxSize + 1]), stack(new std::size_t[maxSize]),
-        ind(maxSize), head(pool.get()) {
+        ind(maxSize), maxSize(maxSize), head(pool.get()) {
     for (std::size_t i = maxSize; i--;) {
+      stack[i] = i + 1;
+    }
+    head->prev = head;
+    head->next = head;
+  }
+
+  PoolLinkedList()
+      : pool(new Node[9]), stack(new std::size_t[8]), ind(8), head(pool.get()) {
+    for (std::size_t i = 8; i--;) {
       stack[i] = i + 1;
     }
     head->prev = head;
@@ -44,13 +64,6 @@ public:
     head->next = head;
   }
 
-  struct Node {
-
-    T obj;
-    Node *prev;
-    Node *next;
-  };
-
   struct iterator {
 
     Node *n;
@@ -62,13 +75,13 @@ public:
     typedef std::bidirectional_iterator_tag iterator_category;
 
     reference operator*() const noexcept { return n->obj; }
-    reference operator->() const noexcept { return &n->obj; }
+    pointer operator->() const noexcept { return &n->obj; }
     iterator &operator++() noexcept {
       n = n->next;
       return *this;
     }
     iterator operator++(int) noexcept {
-      iterator toerturn = *this;
+      iterator toreturn = *this;
       operator++();
       return toreturn;
     }
@@ -108,11 +121,11 @@ public:
   typedef T value_type;
   typedef T &reference;
   typedef const T &const_reference;
-  typedef iterator::difference_type difference_type;
+  typedef typename iterator::difference_type difference_type;
   typedef std::size_t size_type;
 
-  Node *head() { return head; }
-  const Node *head() const { return head; }
+  Node *getHead() { return head; }
+  const Node *getHead() const { return head; }
   Node *front() { return head->next; }
   const Node *front() const { return head->next; }
   Node *back() { return head->prev; }

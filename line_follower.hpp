@@ -1,6 +1,8 @@
 #ifndef HYPERVOXEL_LINE_FOLLOWER_HPP_
 #define HYPERVOXEL_LINE_FOLLOWER_HPP_
 
+#include <cmath>
+#include <condition_variable>
 #include <mutex>
 
 #include "faces_manager.hpp"
@@ -8,53 +10,117 @@
 
 namespace hypervoxel {
 
-template <std::size_t N, class G> class LineFollower {
-
-  Line *lines = nullptr, *lines_end = nullptr;
-  std::size_t dist1, dist2;
-  G<N> terGen;
-  FacesManager &out;
-
-  std::mutex this_mutex;
-  std::condition_variable cond_var;
-
-  /*
-  struct Operation {
-    Line *nlines, *nlines_end;
-    v::DVec<N> cam;
-  };
-  ConcurrentQueue<Operation> queue;
-  */
-
-  bool queued_op;
-  Line *nlines, *nlines_end;
-  const double *cam;
+template <std::size_t N, template <std::size_t> class G> class LineFollower {
 
 public:
-  LineFollower(std::size_t dist1, std::size_t dist2, G<N> &&terGen,
-               FacesManager &out)
-      : dist1(dist1), dist2(dist2), terGen(terGen), out(out), queued_op(false) {
+  struct Operation {
+    const Line<N> *nlines, *nlines_end;
+    const double *ncam;
+  };
+
+  struct Controller {
+    std::mutex this_mutex;
+    std::condition_variable cond_var;
+
+    bool queued_op;
+    Operation op;
+
+    Controller() : queued_op(false), op{nullptr, nullptr, nullptr} {}
+
+    void queue_op(Operation op) {
+      std::unique_lock<std::mutex> lock(this_mutex);
+      queued_op = true;
+      this->op = op;
+      lock.unlock();
+      cond_var.notify_one();
+    }
+  };
+
+private:
+  const Line<N> *lines = nullptr, *lines_end = nullptr;
+  double dist1, dist2;
+  double dist1s, dist2s;
+  G<N> terGen;
+  FacesManager<N> &out;
+
+  Controller &controller;
+
+  // helpers
+
+  template <std::size_t M, class A, class = typename A::thisisavvec>
+  struct DVecFrom {
+
+    typedef void thisisavvec;
+    typedef double value_type;
+    static const std::size_t size = M;
+
+    const A &a;
+
+    value_type operator[](std::size_t i) const { return a[i]; }
+  };
+
+  template <class A> DVecFrom<A::size, A> toDVec(const A &a) { return {a}; }
+
+  template <std::size_t M> struct DVecFloor {
+
+    typedef void thisisavvec;
+    typedef std::int32_t value_type;
+    static const std::size_t size = M;
+
+    const v::DVec<M> &a;
+
+    value_type operator[](std::size_t i) const {
+      double val = a[i];
+      value_type toreturn = val;
+      toreturn -= (toreturn > val);
+      return toreturn;
+    }
+  };
+  template <std::size_t M> struct DVecSign {
+
+    typedef void thisisavvec;
+    typedef std::int32_t value_type;
+    static const std::size_t size = M;
+
+    const v::DVec<M> &a;
+
+    value_type operator[](std::size_t i) const { return (a[i] > 0) * 2 - 1; }
+  };
+
+  std::size_t minInd(const v::DVec<N> &a, double *out) {
+    double val = std::numeric_limits<double>::infinity();
+    std::size_t ind = -1;
+    for (std::size_t i = N; ind--;) {
+      if (a[i] < val) {
+        val = a[i];
+        ind = i;
+      }
+    }
+    *out = val;
+    return ind;
   }
 
-  void queueOp(Line *lines, Line *lines_end, const double *cam) {
-    std::unique_lock<std::mutex> lock(this_mutex);
-    queued_op = true;
-    nlines = lines;
-    nlines_end = lines_end;
-    ncam = cam;
-    lock.unlock();
-    cond_var.notify_one();
-  }
+public:
+  LineFollower(double dist1, double dist2, G<N> &&terGen, FacesManager<N> &out,
+               Controller &controller)
+      : dist1(dist1), dist2(dist2), dist1s(dist1 * dist1),
+        dist2s(dist2 * dist2), terGen(terGen), out(out),
+        controller(controller) {}
+
+  LineFollower(const LineFollower &) = delete;
+  LineFollower(LineFollower &&) = default;
+  LineFollower &operator=(const LineFollower &) = delete;
+  LineFollower &operator=(LineFollower &&) = default;
 
   void operator()() {
+    std::unique_lock<std::mutex> lock(controller.this_mutex);
     while (true) {
-      std::unique_lock<std::mutex> lock(this_mutex);
-      cond_var.wait(lock, [this]() -> bool {
-        if (queued_op) {
-          lines = nlines;
-          lines_end = nlines_end;
+      controller.cond_var.wait(lock, [this]() -> bool {
+        if (controller.queued_op) {
+          lines = controller.op.nlines;
+          lines_end = controller.op.nlines_end;
           out.clear();
-          out.setCam(cam);
+          out.setCam(controller.op.ncam);
           return true;
         }
         return false;
@@ -66,62 +132,26 @@ public:
         v::DVec<N> a = lines->a;
         v::DVec<N> b = lines->b;
         v::DVec<N> df = b - a;
-        if (lines->arr > dist1) {
-          a += df * (lines->arr - dist1);
+        if (lines->arr < dist1s) {
+          a += df *
+               (std::sqrt(lines->pdiscr - lines->dfdf * dist1s) - lines->adf) /
+               lines->dfdf;
         }
-        if (lines->brr < dist2) {
-          b += df * (lines->brr - dist2);
-        }
-        template <std::size_t N> struct DVecFloor {
-
-          typedef void thisisavec;
-          typedef std::int32_t value_type;
-          static const std::size_t size = N;
-
-          const v::DVec<N> &a;
-
-          value_type operator[](std::size_t i) {
-            double val = a[i];
-            value_type toreturn = val;
-            toreturn -= (toreturn > val);
-            return toreturn;
-          }
-        };
-        template <std::size_t N> struct DVecSign {
-
-          typedef void thisisavec;
-          typedef std::int32_t value_type;
-          static const std::size_t size = N;
-
-          const v::DVec<N> &a;
-
-          value_type operator[](std::size_t i) { return (a[i] > 0) * 2 - 1; }
-        };
-        template <std::size_t N>
-        std::size_t minInd(const v::DVec<N> &a, double *out) {
-          std::size_t ind = minInd<N - 1>(a, out);
-          if (a[N - 1] < *out) {
-            *out = a[N - 1];
-            return N - 1;
-          }
-          return ind;
-        }
-        template <> std::size_t minInd<0>(const v::DVec<N> &, double *out) {
-          out = std::numeric_limits<double>::max();
-          return -1;
+        if (lines->brr > dist2s) {
+          b += df *
+               (std::sqrt(lines->pdiscr - lines->dfdf * dist2s) - lines->bdf) /
+               lines->dfdf;
         }
         v::IVec<N> coord = DVecFloor<N>{a};
         v::DVec<N> pos = a;
-        v::DVec<N> invdf = v::ConstantVec<int, 1, N>() / df;
-        v::IVec<N> dfdir = DVecSign<N>{df};
+        v::DVec<N> invdf = 1. / df;
         double dist = 0;
         while (dist < 1) {
-          v::DVec<N> offs = (coord + 1 - pos) * invdf;
-          double ndist;
-          std::size_t ind = minInd<N>(offs, &ndist);
+          v::DVec<N> offs = (toDVec(coord + 1) - pos) * invdf;
+          double ndist = v::min(offs);
           dist += ndist + 1e-8;
           pos = a + df * dist;
-          coord[ind] = DVecFloor<N>{pos};
+          coord = DVecFloor<N>{pos};
           if (ndist >= 1e-8) {
             out.addCube(coord, terGen(coord));
             coord[lines->dim1]--;
@@ -134,7 +164,7 @@ public:
           }
         }
       }
-      queued_op = false;
+      controller.queued_op = false;
     }
   }
 };

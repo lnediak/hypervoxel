@@ -1,11 +1,12 @@
 #ifndef HYPERVOXEL_FACES_MANAGER_HPP_
 #define HYPERVOXEL_FACES_MANAGER_HPP_
 
-#include <numeric_limits>
+#include <limits>
 #include <unordered_map>
 #include <utility>
 
 #include "pool_linked_list.hpp"
+#include "terrain_slicer.hpp"
 #include "vector.hpp"
 
 namespace hypervoxel {
@@ -17,69 +18,40 @@ template <std::size_t N> class FacesManager {
   struct Face {
     v::IVec<N> c;
     std::size_t dim;
+
+    constexpr bool operator==(const Face &other) const noexcept {
+      return dim == other.dim && c == other.c;
+    }
   };
 
   struct FaceHash {
 
     std::size_t operator()(const Face &f) const noexcept {
-      std::size_t basic = CoordHash<N>()(f.c);
+      std::size_t basic = v::IVecHash<N>()(f.c);
       return (((basic << (32 - f.dim)) | (basic >> f.dim)) ^ f.dim) + f.dim;
     }
   };
 
-  struct Entry;
+  struct Entry {
+    std::uint32_t color;
+    /* plist::Node */ void *listEntry;
+
+    Entry() : color(0), listEntry(0) {}
+  };
 
   typedef std::unordered_map<Face, Entry, FaceHash> umap;
-  typedef PoolLinkedList<umap::iterator> plist;
-
-  struct Entry {
-    std::uint32_t color = 0;
-    plist::Node *listEntry = nullptr;
-  };
+  typedef PoolLinkedList<typename umap::iterator> plist;
 
   umap map;
   plist list;
   std::size_t maxSize;
   v::DVec<N> cam;
 
-  template <std::size_t D>
-  void addFaces(const v::IVec<N> &coord, std::uint32_t val) {
-    Face f1{coord, D}, f2{coord, D};
-    if (cam[D] < coord[D]) {
-      f2.c[D]++;
-    } else if (cam[D] > (coord[D] + 1)) {
-      f1.c[D]++;
-    } else {
-      return addFaces<D + 1>(coord, val);
-    }
-
-    auto pp = map.emplace(f1, {});
-    auto next = pp.first;
-    if (pp.second) {
-      next->second.color = val;
-      next->second.listEntry = list.addToBeg(next);
-    }
-
-    if (!(~val & 0xFF)) {
-      // this means opaque
-      pp = map.emplace(f2, {});
-      next = pp.first;
-      if (!pp.second) {
-        if (next->second.listEntry) {
-          list.remove(next->second.listEntry);
-          next->second.listEntry = nullptr;
-        }
-      }
-    }
-
-    addFaces<D + 1>(coord, val);
-  }
-
-  template <> void addFaces<N>(const v::IVec<N> &, std::uint32_t) { return; }
-
 public:
   FacesManager(std::size_t maxSize, const v::DVec<N> &cam)
       : map(maxSize * 2), list(maxSize), maxSize(maxSize), cam(cam) {}
+
+  FacesManager() : maxSize(8) {}
 
   void clear() {
     map.clear();
@@ -98,19 +70,47 @@ public:
     if (map.bucket_count() - map.size() <= N) {
       return false;
     }
-    addFaces<0>(coord, val);
+    for (std::size_t dim = N; dim--;) {
+      Face f1{coord, dim}, f2{coord, dim};
+      if (cam[dim] < coord[dim]) {
+        f2.c[dim]++;
+      } else if (cam[dim] > (coord[dim] + 1)) {
+        f1.c[dim]++;
+      } else {
+        continue;
+      }
+
+      auto pp = map.emplace(f1, Entry{});
+      auto next = pp.first;
+      if (pp.second) {
+        next->second.color = val;
+        next->second.listEntry = list.addToBeg(next);
+      }
+
+      if (!(~val & 0xFF)) {
+        // this means opaque
+        pp = map.emplace(f2, Entry{});
+        next = pp.first;
+        if (!pp.second) {
+          if (next->second.listEntry) {
+            list.remove(
+                static_cast<typename plist::Node *>(next->second.listEntry));
+            next->second.listEntry = nullptr;
+          }
+        }
+      }
+    }
     return true;
   }
 
-  void fillVertexAttribPointer(const double *forward, const double *right,
-                               const double *up, float *out,
-                               std::size_t maxTriangles) const {
-    v::DVec<N> f;
-    f.copyInto(forward);
-    v::DVec<N> r;
-    r.copyInto(right);
-    v::DVec<N> u;
-    u.copyInto(up);
+  float *fillVertexAttribPointer(const SliceDirs<N> &sd, float *out,
+                                 float *out_fend) const {
+    v::DVec<N> fc = sd.forward;
+    v::DVec<N> rc = sd.right;
+    v::DVec<N> uc = sd.up;
+    v::DVec<N> f = fc - cam;
+    v::DVec<N> r = rc - cam;
+    v::DVec<N> u = uc - cam;
 
     v::DVec<3> normals[N][2];
     v::Vec<std::size_t, 3> sort[N];
@@ -155,16 +155,16 @@ public:
         if (i == j) {
           continue;
         }
-        reductions[i][j][1][0] = v::dot(normals[j[1]], side1[i]);
-        reductions[i][j][1][1] = v::dot(normals[j[1]], side2[i]);
+        reductions[i][j][1][0] = v::dot(normals[j][1], side1[i]);
+        reductions[i][j][1][1] = v::dot(normals[j][1], side2[i]);
         reductionSort[i][j][0] =
             ab(reductions[i][j][1][0]) > ab(reductions[i][j][1][1]) ? 0 : 1;
-        reductionSort[i][j][1] = !reductionSort[i][j][1][0];
+        reductionSort[i][j][1] = !reductionSort[i][j][0];
         reductions[i][j][0] = -reductions[i][j][1];
         reductionAngles[i][j][0] =
-            std::atan2(reduction[i][j][0][1], reduction[i][j][0][0]);
+            std::atan2(reductions[i][j][0][1], reductions[i][j][0][0]);
         reductionAngles[i][j][1] =
-            std::atan2(reduction[i][j][1][1], reduction[i][j][1][0]);
+            std::atan2(reductions[i][j][1][1], reductions[i][j][1][0]);
       }
     }
 
@@ -178,7 +178,7 @@ public:
       planeCounts[i] = 0;
       for (std::size_t j = N - 1; j--;) {
         std::size_t dim = j + (j >= i);
-        if (ab(reductions[i][j][0][reductionsSort[i][j][0]]) < 1e-6) {
+        if (ab(reductions[i][j][0][reductionSort[i][j][0]]) < 1e-6) {
           continue;
         }
         sortedPlanes[i][planeCounts[i]++] = {dim, true};
@@ -197,24 +197,23 @@ public:
 
     // -----------------------------------------------------------MAIN ALGORITHM
 
-    double *out_end = out + maxTriangles * 7 - 21 * N;
-    for (plist::iterator iter = plist.begin(), iter_end = plist.end();
+    float *out_end = out_fend - 21 * N;
+    for (typename plist::iterator iter = list.begin(), iter_end = list.end();
          iter != iter_end && out < out_end; ++iter) {
       if (out >= out_end) {
         break;
       }
-      std::size_t dim = iter->first.dim;
-      if (ab(normals[dim][sort[dim][0]]) < 1e-6) {
+      std::size_t dim = (*iter)->first.dim;
+      if (ab(normals[dim][0][sort[dim][0]]) < 1e-6) {
         continue;
       }
-      v::IVec<N> c = iter->first.c;
-      std::int32_t cc[N][2];
+      v::IVec<N> c = (*iter)->first.c;
+      double cc[N][2];
       for (std::size_t i = N; i--;) {
-        cc[i][1] = c[i];
-        cc[i][0] = -c[i] - 1;
+        cc[i][0] = -(cc[i][1] = c[i] - cam[i]) - 1;
       }
       v::DVec<3> basep;
-      basep[sort[dim][0]] = c[dim] / normals[dim][sort[dim][0]];
+      basep[sort[dim][0]] = cc[dim][1] / normals[dim][1][sort[dim][0]];
       basep[sort[dim][1]] = 0;
       basep[sort[dim][2]] = 0;
       v::DVec<2> planebps[N][2];
@@ -223,10 +222,10 @@ public:
           continue;
         }
         planebps[i][0][reductionSort[dim][i][0]] =
-            invc[i] / reduction[dim][i][0][reductionSort[dim][i][0]];
+            cc[i][0] / reductions[dim][i][0][reductionSort[dim][i][0]];
         planebps[i][0][reductionSort[dim][i][1]] = 0;
         planebps[i][1][reductionSort[dim][i][0]] =
-            c[i] / reduction[dim][i][1][reductionSort[dim][i][0]];
+            cc[i][1] / reductions[dim][i][1][reductionSort[dim][i][0]];
         planebps[i][1][reductionSort[dim][i][1]] = 0;
       }
       struct EdgeEntry {
@@ -234,12 +233,13 @@ public:
         double i1, i2;
       };
       EdgeEntry edges[N];
-      edges[0] = {sortedPlanes[0], std::numeric_limits<double>::quiet_NaN(),
+      edges[0] = {sortedPlanes[dim][0],
+                  std::numeric_limits<double>::quiet_NaN(),
                   std::numeric_limits<double>::infinity()};
       std::size_t edgeCount = 1;
       bool feasible = true;
-      for (std::size_t i = 1; i < planeCount[dim]; i++) {
-        HPlnI cpln = sortedPlanes[i];
+      for (std::size_t i = 1; i < planeCounts[dim]; i++) {
+        HPlnI cpln = sortedPlanes[dim][i];
         v::DVec<2> redcpln = reductions[dim][cpln.dim][cpln.forward];
         double ccc = cc[cpln.dim][cpln.forward];
         std::size_t j = edgeCount;
@@ -300,7 +300,7 @@ public:
           v::DVec<2> &rednpln =
               reductions[dim][edgesBeg[1].pln.dim][edgesBeg[1].pln.forward];
           bplnbp = planebps[edgesBeg->pln.dim][edgesBeg->pln.forward];
-          double ncc = cc[edgesBeg[1].pln.dim][edgesBeg[1].forward];
+          double ncc = cc[edgesBeg[1].pln.dim][edgesBeg[1].pln.forward];
           edgesBeg->i2 = (ncc - v::dot(rednpln, bplnbp)) /
                          -(rednpln[1] * redbpln[0] - rednpln[0] * redbpln[1]);
           continue;
@@ -321,7 +321,7 @@ public:
           v::DVec<2> &redppln =
               reductions[dim][edgesEnd[-1].pln.dim][edgesEnd[-1].pln.forward];
           eeplnbp = planebps[edgesBeg->pln.dim][edgesBeg->pln.forward];
-          double pcc = cc[edgesEnd[-1].pln.dim][edgesEnd[-1].forward];
+          double pcc = cc[edgesEnd[-1].pln.dim][edgesEnd[-1].pln.forward];
           edgesEnd->i1 = (pcc - v::dot(redppln, eeplnbp)) /
                          (redppln[0] * redeepln[1] - redppln[1] * redeepln[0]);
           continue;
@@ -341,7 +341,7 @@ public:
         }
       }
 
-      std::uint32_t col = iter->second.color;
+      std::uint32_t col = (*iter)->second.color;
       float r = (col >> 24) / 256.f;
       float g = ((col >> 16) & 0xFF) / 256.f;
       float b = ((col >> 8) & 0xFF) / 256.f;
@@ -372,7 +372,8 @@ public:
         *out++ = a;
       }
     } // end for (...)
-  }   // end fillVertexAttribPointer(...)
+    return out;
+  } // end fillVertexAttribPointer(...)
 };
 
 } // namespace hypervoxel

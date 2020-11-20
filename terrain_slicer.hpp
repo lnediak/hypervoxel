@@ -6,28 +6,35 @@
 
 #include "vector.hpp"
 
-struct Line {
+namespace hypervoxel {
+
+template <std::size_t N> struct Line {
   v::DVec<N> a, b;
-  double arr, brr;
-  std::size_t dim1, dim2;
+  /// all defs here with a meaning a - cam, b meaning b - cam
+  double arr = 0;    /// a dot a
+  double brr = 0;    /// b dot b
+  double dfdf = 0;   /// (b - a) dot (b - a)
+  double adf = 0;    /// a dot (b - a)
+  double bdf = 0;    /// b dot (b - a)
+  double pdiscr = 0; /// adf * adf - dfdf * arr = bdf * bdf - dfdf * brr
+                     /// = (a dot b)^2 - (a dot a)*(b dot b)
+  std::size_t dim1 = 0, dim2 = 0;
+};
+
+template <std::size_t N> struct SliceDirs {
+  v::DVec<N> cam, forward, right, up;
+  double width2, height2;
 };
 
 template <std::size_t N>
-inline Line *getLines(const double *cam, const double *forward,
-                      const double *right, const double *up, double width2,
-                      double height2, double dist1, double dist2, Line *lines) {
-  v::DVec<N> vcam;
-  vcam.copyInto(cam);
-  v::DVec<N> vfor;
-  vfor.copyInto(forward);
-  vfor *= dist2;
-  v::DVec<N> vright;
-  vright.copyInto(right);
-  vright *= width2 * dist2;
-  v::DVec<N> vup;
-  vup.copyInto(up);
-  vup *= height2 * dist2;
-  double findist = dist2 * dist2 + width2 * width2 + height2 * height2;
+inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
+  v::DVec<N> vcam = sd.cam;
+  v::DVec<N> vfor = sd.forward;
+  vfor *= dist;
+  v::DVec<N> vright = sd.right;
+  vright *= sd.width2 * dist;
+  v::DVec<N> vup = sd.up;
+  vup *= sd.height2 * dist;
   v::DVec<N> p1 = vcam;
   v::DVec<N> p2 = vcam - vright - vup;
   v::DVec<N> p3 = vcam - vright + vup;
@@ -36,6 +43,8 @@ inline Line *getLines(const double *cam, const double *forward,
   struct LineRange {
     v::DVec<N> p1, p2;
     v::DVec<N> min, max;
+
+    LineRange() {}
 
     LineRange(const v::DVec<N> &p1, const v::DVec<N> &p2)
         : p1(p1), p2(p2), min(v::elementwiseMin(p1, p2)),
@@ -47,7 +56,7 @@ inline Line *getLines(const double *cam, const double *forward,
                              {0, 4}, {1, 4}, {2, 4}, {3, 4}};
   int planes[N * 2];
   for (std::size_t i = N; i--;) {
-    planes[i] = std::floor(cam[i]);
+    planes[i] = std::floor(vcam[i]);
     planes[i + N] = planes[i] + 1;
   }
   for (std::size_t i = N * 2; i--;) {
@@ -58,7 +67,7 @@ inline Line *getLines(const double *cam, const double *forward,
         std::size_t linei = -1;
         v::DVec<N> p;
       };
-      Intersection itions[5]();
+      Intersection itions[5];
       std::size_t itionc = 0;
       for (std::size_t j = 8; j--;) {
         LineRange l = origlines[j];
@@ -75,7 +84,7 @@ inline Line *getLines(const double *cam, const double *forward,
       if (!itionc) {
         break;
       }
-      std::size_t facecs[5](0);
+      std::size_t facecs[5] = {0, 0, 0, 0, 0};
       std::size_t faceits[5][2];
       for (std::size_t k = itionc; k--;) {
         std::size_t linei = itions[k].linei;
@@ -102,7 +111,7 @@ inline Line *getLines(const double *cam, const double *forward,
           continue;
         }
         for (int plane2 = planes2[ii];; plane2++) {
-          Intersection itions2[2]();
+          Intersection itions2[2];
           std::size_t itionc2 = 0;
           for (std::size_t j = itionc; j--;) {
             LineRange l = lines2d[j];
@@ -135,6 +144,11 @@ inline Line *getLines(const double *cam, const double *forward,
             lines->arr = p2rr;
             lines->brr = p1rr;
           }
+          lines->dfdf = v::norm(lines->b - lines->a);
+          lines->adf = v::dot(lines->a - vcam, lines->b - lines->a);
+          lines->bdf = v::dot(lines->b - vcam, lines->b - lines->a);
+          double ab = v::dot(lines->a - vcam, lines->b - vcam);
+          lines->pdiscr = ab * ab - p1rr * p2rr;
           lines++;
         }
       }
@@ -142,6 +156,8 @@ inline Line *getLines(const double *cam, const double *forward,
   }
   return lines;
 }
+
+} // namespace hypervoxel
 
 #endif // HYPERVOXEL_TERRAIN_SLICER_HPP_
 
