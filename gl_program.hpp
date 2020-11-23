@@ -24,6 +24,9 @@ struct GLProgram {
     return *this;
   }
   ~GLProgram() {
+    if (buf) {
+      glDeleteBuffers(1, &buf);
+    }
     if (prog) {
       glDeleteProgram(prog);
     }
@@ -45,7 +48,7 @@ struct GLProgram {
                        "  gl_FragColor = outCol;"
                        "}";
     GLuint vs = createShader(vsrc, GL_VERTEX_SHADER);
-    GLuint fs = createShader(fsrc, GL_VERTEX_SHADER);
+    GLuint fs = createShader(fsrc, GL_FRAGMENT_SHADER);
 
     GLuint pro = glCreateProgram();
     if (!pro) {

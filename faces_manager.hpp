@@ -70,7 +70,11 @@ public:
     if (map.bucket_count() - map.size() <= N) {
       return false;
     }
+    std::cout << "Adding Cube: ";
+    // debug
     for (std::size_t dim = N; dim--;) {
+      std::cout << coord[dim] << ", ";
+      //debug
       Face f1{coord, dim}, f2{coord, dim};
       if (cam[dim] < coord[dim]) {
         f2.c[dim]++;
@@ -178,7 +182,7 @@ public:
       planeCounts[i] = 0;
       for (std::size_t j = N - 1; j--;) {
         std::size_t dim = j + (j >= i);
-        if (ab(reductions[i][j][0][reductionSort[i][j][0]]) < 1e-6) {
+        if (ab(reductions[i][dim][0][reductionSort[i][dim][0]]) < 1e-6) {
           continue;
         }
         sortedPlanes[i][planeCounts[i]++] = {dim, true};

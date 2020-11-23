@@ -36,10 +36,10 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
   v::DVec<N> vup = sd.up;
   vup *= sd.height2 * dist;
   v::DVec<N> p1 = vcam;
-  v::DVec<N> p2 = vcam - vright - vup;
-  v::DVec<N> p3 = vcam - vright + vup;
-  v::DVec<N> p4 = vcam + vright + vup;
-  v::DVec<N> p5 = vcam + vright - vup;
+  v::DVec<N> p2 = vcam + vfor - vright - vup;
+  v::DVec<N> p3 = vcam + vfor - vright + vup;
+  v::DVec<N> p4 = vcam + vfor + vright + vup;
+  v::DVec<N> p5 = vcam + vfor + vright - vup;
   struct LineRange {
     v::DVec<N> p1, p2;
     v::DVec<N> min, max;
@@ -61,7 +61,7 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
   }
   for (std::size_t i = N * 2; i--;) {
     std::size_t dim = i >= N ? i - N : i;
-    for (int plane = planes[i];; plane++) {
+    for (int plane = planes[i];; i >= N ? plane++ : plane--) {
       struct Intersection {
         bool isReal = false;
         std::size_t linei = -1;
@@ -84,6 +84,7 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
       if (!itionc) {
         break;
       }
+
       std::size_t facecs[5] = {0, 0, 0, 0, 0};
       std::size_t faceits[5][2];
       for (std::size_t k = itionc; k--;) {
@@ -105,12 +106,12 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
         planes2[j] = std::floor(itions[0].p[j]);
         planes2[j + N] = planes2[j] + 1;
       }
-      for (std::size_t ii = N * 2; ii--;) {
+      for (std::size_t ii = i; ii--;) {
         std::size_t dim2 = ii >= N ? ii - N : ii;
         if (dim == dim2) {
           continue;
         }
-        for (int plane2 = planes2[ii];; plane2++) {
+        for (int plane2 = planes2[ii];; ii >= N ? plane2++ : plane2--) {
           Intersection itions2[2];
           std::size_t itionc2 = 0;
           for (std::size_t j = itionc; j--;) {
@@ -120,7 +121,7 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
               itions2[itionc2].linei = j;
               double offset =
                   l.max[dim2] - l.min[dim2] >= 1e-8
-                      ? (plane - l.p1[dim2]) / (l.p2[dim2] - l.p1[dim2])
+                      ? (plane2 - l.p1[dim2]) / (l.p2[dim2] - l.p1[dim2])
                       : 0.5;
               itions2[itionc2].p = l.p1 + (l.p2 - l.p1) * offset;
               itions2[itionc2++].p[dim2] = plane2;

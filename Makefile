@@ -6,3 +6,6 @@ basic_test: basic_test.o
 basic_test.o: basic_test.cpp
 	g++ basic_test.cpp -c -o basic_test.o -std=c++11 -Wall -Wextra -pedantic -g3 -O2
 
+clean:
+	/bin/rm basic_test.o basic_test
+

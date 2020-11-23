@@ -103,7 +103,7 @@ template <class T, std::size_t N, class A> using SAdd = ScalarOp<T, N, AddU, A>;
 template <class T, std::size_t N, class A> using Sum = Combine<T, N, AddU, A>;
 
 template <class T> struct SubU {
-  static T apply(T a, T b) { return a + b; }
+  static T apply(T a, T b) { return a - b; }
 };
 template <class T, std::size_t N, class A, class B>
 using Sub = BinaryOp<T, N, SubU, A, B>;
@@ -120,7 +120,7 @@ template <class T, std::size_t N, class A>
 using Product = Combine<T, N, MultU, A>;
 
 template <class T> struct DivU {
-  static T apply(T a, T b) { return a * b; }
+  static T apply(T a, T b) { return a / b; }
 };
 template <class T, std::size_t N, class A, class B>
 using Div = BinaryOp<T, N, DivU, A, B>;

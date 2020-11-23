@@ -16,6 +16,7 @@ public:
   struct Operation {
     const Line<N> *nlines, *nlines_end;
     const double *ncam;
+    bool term;
   };
 
   struct Controller {
@@ -25,7 +26,7 @@ public:
     bool queued_op;
     Operation op;
 
-    Controller() : queued_op(false), op{nullptr, nullptr, nullptr} {}
+    Controller() : queued_op(false), op{nullptr, nullptr, nullptr, false} {}
 
     void queue_op(Operation op) {
       std::unique_lock<std::mutex> lock(this_mutex);
@@ -115,8 +116,12 @@ public:
   void operator()() {
     std::unique_lock<std::mutex> lock(controller.this_mutex);
     while (true) {
-      controller.cond_var.wait(lock, [this]() -> bool {
+      bool shouldTerm = false;
+      controller.cond_var.wait(lock, [this, &shouldTerm]() -> bool {
         if (controller.queued_op) {
+          if (controller.op.term) {
+            return shouldTerm = true;
+          }
           lines = controller.op.nlines;
           lines_end = controller.op.nlines_end;
           out.clear();
@@ -125,6 +130,9 @@ public:
         }
         return false;
       });
+      if (shouldTerm) {
+        return;
+      }
       for (; lines != lines_end; ++lines) {
         if (lines->arr > dist2 || lines->brr < dist1) {
           continue;

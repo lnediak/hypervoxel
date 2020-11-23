@@ -22,7 +22,6 @@ int main() {
   }
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, 0);
   const std::size_t width = 1000, height = 1000;
   GLFWwindow *window =
       glfwCreateWindow(width, height, "test lel", nullptr, nullptr);
@@ -39,10 +38,15 @@ int main() {
   glDepthFunc(GL_LESS);
 
   double pdists[] = {50, 47.8, 45.4, 42.7, 39.7, 36, 31.5, 25};
-  hypervoxel::SliceDirs<4> sd = {
-      {-5, 25, 20, 20}, {1, -1, 0, 0}, {0, 0, 1, -1}, {1, 1, -1, -1}, 1, 1};
+  double sq12 = std::sqrt(.5);
+  hypervoxel::SliceDirs<4> sd = {{-5, 25, 20, 20},
+                                 {sq12, -sq12, 0, 0},
+                                 {0, 0, sq12, -sq12},
+                                 {.5, .5, -.5, -.5},
+                                 1,
+                                 1};
   hypervoxel::TerrainRenderer<4, hypervoxel::TerrainGeneratorTester> renderer(
-      hypervoxel::TerrainGeneratorTester<4>{169, 144}, 8, pdists, sd);
+      hypervoxel::TerrainGeneratorTester<4>{2, 1}, 8, pdists, sd);
   const std::size_t lenTriangles = 16777216;
   std::unique_ptr<float[]> triangles(new float[lenTriangles]);
   float *triangles_end = triangles.get() + lenTriangles;
