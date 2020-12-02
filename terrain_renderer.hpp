@@ -1,6 +1,7 @@
 #ifndef TERRAIN_RENDERER_HPP_
 #define TERRAIN_RENDERER_HPP_
 
+#include <chrono>
 #include <memory>
 #include <thread>
 
@@ -74,7 +75,13 @@ public:
       controllers[i].queue_op({lines.get(), lines_end, &sd.cam[0], false});
     }
     for (std::size_t i = numThreads; i--;) {
-      std::unique_lock<std::mutex> lock(controllers[i].this_mutex);
+      while (true) {
+        std::unique_lock<std::mutex>(controllers[i].this_mutex);
+        if (!controllers[i].queued_op) {
+          break;
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds{2});
+      }
     }
     for (std::size_t i = numThreads; i--;) {
       out = facesManagers[i].fillVertexAttribPointer(sd, out, out_fend);

@@ -77,15 +77,17 @@ private:
       return toreturn;
     }
   };
-  template <std::size_t M> struct DVecSign {
+  template <std::size_t M> struct DVecAbs {
 
     typedef void thisisavvec;
-    typedef std::int32_t value_type;
+    typedef double value_type;
     static const std::size_t size = M;
 
     const v::DVec<M> &a;
 
-    value_type operator[](std::size_t i) const { return (a[i] > 0) * 2 - 1; }
+    value_type operator[](std::size_t i) const {
+      return a[i] >= 0 ? a[i] : -a[i];
+    }
   };
 
   std::size_t minInd(const v::DVec<N> &a, double *out) {
@@ -152,7 +154,7 @@ public:
         }
         v::IVec<N> coord = DVecFloor<N>{a};
         v::DVec<N> pos = a;
-        v::DVec<N> invdf = 1. / df;
+        v::DVec<N> invdf = DVecAbs<N>{1. / df};
         double dist = 0;
         while (dist < 1) {
           v::DVec<N> offs = (toDVec(coord + 1) - pos) * invdf;
@@ -161,6 +163,10 @@ public:
           pos = a + df * dist;
           coord = DVecFloor<N>{pos};
           if (ndist >= 1e-8) {
+
+            for (std::size_t i = 0; i < N; i++) std::cout << coord[i] << " ";
+            std::cout << std::endl;
+
             out.addCube(coord, terGen(coord));
             coord[lines->dim1]--;
             out.addCube(coord, terGen(coord));
@@ -168,7 +174,7 @@ public:
             out.addCube(coord, terGen(coord));
             coord[lines->dim1]++;
             out.addCube(coord, terGen(coord));
-            coord[lines->dim2]++;
+            // coord[lines->dim2]++;
           }
         }
       }

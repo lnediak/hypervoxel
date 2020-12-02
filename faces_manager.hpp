@@ -70,11 +70,7 @@ public:
     if (map.bucket_count() - map.size() <= N) {
       return false;
     }
-    std::cout << "Adding Cube: ";
-    // debug
     for (std::size_t dim = N; dim--;) {
-      std::cout << coord[dim] << ", ";
-      //debug
       Face f1{coord, dim}, f2{coord, dim};
       if (cam[dim] < coord[dim]) {
         f2.c[dim]++;
@@ -116,15 +112,15 @@ public:
     v::DVec<N> r = rc - cam;
     v::DVec<N> u = uc - cam;
 
-    v::DVec<3> normals[N][2];
-    v::Vec<std::size_t, 3> sort[N];
-    v::DVec<3> side1[N];
-    v::DVec<3> side2[N];
+    v::DVec<3> normals[N * 2];
+    v::Vec<std::size_t, 3> sort[N * 2];
+    v::DVec<3> side1[N * 2];
+    v::DVec<3> side2[N * 2];
     for (std::size_t i = N; i--;) {
-      normals[i][1][0] = r[i];
-      normals[i][1][1] = u[i];
-      normals[i][1][2] = f[i];
-      normals[i][0] = -normals[i][1];
+      normals[i + N][0] = r[i];
+      normals[i + N][1] = u[i];
+      normals[i + N][2] = f[i];
+      normals[i] = -normals[i + N];
       std::size_t minI;
       std::size_t maxI;
       if (ab(r[i]) > ab(u[i])) {
@@ -135,63 +131,55 @@ public:
         maxI = ab(f[i]) > ab(u[i]) ? 2 : 1;
       }
       std::size_t midI = minI ? (maxI ? 0 : (minI % 2 + 1)) : (maxI % 2 + 1);
-      sort[i][0] = maxI;
-      sort[i][1] = midI;
-      sort[i][2] = minI;
+      sort[i][0] = sort[i + N][0] = maxI;
+      sort[i][1] = sort[i + N][1] = midI;
+      sort[i][2] = sort[i + N][2] = minI;
 
-      side1[i][maxI] = normals[i][1][midI];
-      side1[i][midI] = -normals[i][1][maxI];
-      side1[i][minI] = 0;
+      side1[i][maxI] = side1[i + N][maxI] = -normals[i][midI];
+      side1[i][midI] = side1[i + N][midI] = normals[i][maxI];
+      side1[i][minI] = side1[i + N][minI] = 0;
 
-      side2[i][maxI] = -normals[i][1][minI];
-      side2[i][midI] =
-          -normals[i][1][midI] * normals[i][1][minI] / normals[i][1][maxI];
-      side2[i][minI] =
-          normals[i][1][midI] * normals[i][1][midI] / normals[i][1][maxI] +
-          normals[i][1][maxI];
+      side2[i][maxI] = side2[i + N][maxI] = normals[i][minI];
+      side2[i][midI] = side2[i + N][midI] = normals[i][minI] * (normals[i][midI] / normals[i][maxI]);
+      side2[i][minI] = side2[i + N][minI] = -normals[i][midI] * (normals[i][midI] / normals[i][maxI]) - normals[i][maxI];
+
+      side1[i] /= std::sqrt(v::norm(side1[i]));
+      side2[i] /= std::sqrt(v::norm(side2[i]));
     }
 
-    v::DVec<2> reductions[N][N][2];
-    v::Vec<std::size_t, 2> reductionSort[N][N];
-    double reductionAngles[N][N][2];
+    v::DVec<2> reductions[N][N * 2];
+    v::Vec<std::size_t, 2> reductionSort[N][N * 2];
+    double reductionAngles[N][N * 2];
     for (std::size_t i = N; i--;) {
       for (std::size_t j = N; j--;) {
         if (i == j) {
           continue;
         }
-        reductions[i][j][1][0] = v::dot(normals[j][1], side1[i]);
-        reductions[i][j][1][1] = v::dot(normals[j][1], side2[i]);
-        reductionSort[i][j][0] =
-            ab(reductions[i][j][1][0]) > ab(reductions[i][j][1][1]) ? 0 : 1;
-        reductionSort[i][j][1] = !reductionSort[i][j][0];
-        reductions[i][j][0] = -reductions[i][j][1];
-        reductionAngles[i][j][0] =
-            std::atan2(reductions[i][j][0][1], reductions[i][j][0][0]);
-        reductionAngles[i][j][1] =
-            std::atan2(reductions[i][j][1][1], reductions[i][j][1][0]);
+        reductions[i][j][0] = v::dot(normals[j], side1[i]);
+        reductions[i][j][1] = v::dot(normals[j], side2[i]);
+        reductions[i][j + N] = -reductions[i][j];
+        reductionSort[i][j][0] = reductionSort[i][j + N][0] = ab(reductions[i][j][0]) > ab(reductions[i][j][1]) ? 0 : 1;
+        reductionSort[i][j][1] = reductionSort[i][j + N][1] = !reductionSort[i][j][0];
+        reductionAngles[i][j] = std::atan2(reductions[i][j][1], reductions[i][j][0]);
+        reductionAngles[i][j + N] = std::atan2(reductions[i][j + N][1], reductions[i][j + N][0]);
       }
     }
 
-    struct HPlnI {
-      std::size_t dim;
-      bool forward;
-    };
-    HPlnI sortedPlanes[N][2 * N - 2];
+    std::size_t sortedPlanes[N][2 * N - 2];
     std::size_t planeCounts[N];
     for (std::size_t i = N; i--;) {
       planeCounts[i] = 0;
       for (std::size_t j = N - 1; j--;) {
         std::size_t dim = j + (j >= i);
-        if (ab(reductions[i][dim][0][reductionSort[i][dim][0]]) < 1e-6) {
+        if (ab(reductions[i][dim][reductionSort[i][dim][0]]) < 1e-6) {
           continue;
         }
-        sortedPlanes[i][planeCounts[i]++] = {dim, true};
-        sortedPlanes[i][planeCounts[i]++] = {dim, false};
+        sortedPlanes[i][planeCounts[i]++] = dim + N;
+        sortedPlanes[i][planeCounts[i]++] = dim;
       }
       std::sort(&sortedPlanes[i][0], &sortedPlanes[i + 1][0],
-                [&reductionAngles, i](HPlnI a, HPlnI b) -> bool {
-                  return reductionAngles[i][a.dim][a.forward] <
-                         reductionAngles[i][b.dim][b.forward];
+                [&reductionAngles, i](std::size_t a, std::size_t b) -> bool {
+                  return reductionAngles[i][a] < reductionAngles[i][b];
                 });
     }
 
@@ -202,38 +190,52 @@ public:
     // -----------------------------------------------------------MAIN ALGORITHM
 
     float *out_end = out_fend - 21 * N;
+
+    std::size_t DEBUGVALUE = 0;
+
     for (typename plist::iterator iter = list.begin(), iter_end = list.end();
          iter != iter_end && out < out_end; ++iter) {
+
+      if (DEBUGVALUE > 5) break;
+
       if (out >= out_end) {
         break;
       }
       std::size_t dim = (*iter)->first.dim;
-      if (ab(normals[dim][0][sort[dim][0]]) < 1e-6) {
+      if (ab(normals[dim][sort[dim][0]]) < 1e-6) {
         continue;
       }
       v::IVec<N> c = (*iter)->first.c;
-      double cc[N][2];
-      for (std::size_t i = N; i--;) {
-        cc[i][0] = -(cc[i][1] = c[i] - cam[i]) - 1;
+
+      std::cout << "loop" << std::endl;
+      for (std::size_t i = 0; i < N; i++) {
+        std::cout << c[i] << " ";
       }
+      std::cout << std::endl << dim << std::endl;
+      std::cout << (*iter)->second.color << std::endl;
+
       v::DVec<3> basep;
-      basep[sort[dim][0]] = cc[dim][1] / normals[dim][1][sort[dim][0]];
+      basep[sort[dim][0]] = (c[dim] - cam[dim]) / normals[dim + N][sort[dim][0]];
       basep[sort[dim][1]] = 0;
       basep[sort[dim][2]] = 0;
-      v::DVec<2> planebps[N][2];
+
+      double cc[N * 2];
       for (std::size_t i = N; i--;) {
-        if (i == dim) {
+        cc[i] = -(cc[i + N] = c[i]) - 1;
+      }
+      v::DVec<2> planebps[N * 2];
+      for (std::size_t i = N * 2; i--;) {
+        if (i == dim || i == dim + N) { 
           continue;
         }
-        planebps[i][0][reductionSort[dim][i][0]] =
-            cc[i][0] / reductions[dim][i][0][reductionSort[dim][i][0]];
-        planebps[i][0][reductionSort[dim][i][1]] = 0;
-        planebps[i][1][reductionSort[dim][i][0]] =
-            cc[i][1] / reductions[dim][i][1][reductionSort[dim][i][0]];
-        planebps[i][1][reductionSort[dim][i][1]] = 0;
+        cc[i] -= basep[sort[dim][0]] * normals[i][sort[dim][0]];
+        planebps[i][reductionSort[dim][i][0]] =
+             cc[i] / reductions[dim][i][reductionSort[dim][i][0]];
+        planebps[i][reductionSort[dim][i][1]] = 0;
       }
+
       struct EdgeEntry {
-        HPlnI pln;
+        std::size_t pln;
         double i1, i2;
       };
       EdgeEntry edges[N];
@@ -241,16 +243,26 @@ public:
                   std::numeric_limits<double>::quiet_NaN(),
                   std::numeric_limits<double>::infinity()};
       std::size_t edgeCount = 1;
+
       bool feasible = true;
+
       for (std::size_t i = 1; i < planeCounts[dim]; i++) {
-        HPlnI cpln = sortedPlanes[dim][i];
-        v::DVec<2> redcpln = reductions[dim][cpln.dim][cpln.forward];
-        double ccc = cc[cpln.dim][cpln.forward];
+        std::size_t cpln = sortedPlanes[dim][i];
+        v::DVec<2> redcpln = reductions[dim][cpln];
+        double ccc = cc[cpln];
+
+        std::cout << "cpln: " << cpln << std::endl;
+        std::cout << "redcpln: " << redcpln[0] << " " << redcpln[1] << std::endl;
+        std::cout << "ccc: " << ccc << std::endl;
+
         std::size_t j = edgeCount;
         while (j--) {
-          v::DVec<2> &redjpln =
-              reductions[dim][edges[j].pln.dim][edges[j].pln.forward];
-          v::DVec<2> &jplnbp = planebps[edges[j].pln.dim][edges[j].pln.forward];
+          v::DVec<2> &redjpln = reductions[dim][edges[j].pln];
+          v::DVec<2> &jplnbp = planebps[edges[j].pln];
+
+          std::cout << "redjpln: " << redjpln[0] << " " << redjpln[1] << std::endl;
+          std::cout << "jplnbp: " << jplnbp[0] << " " << jplnbp[1] << std::endl;
+
           // the denominator looks funny to deal with the case of parallel edges
           edges[j].i2 = (ccc - v::dot(redcpln, jplnbp)) /
                         -(redcpln[1] * redjpln[0] - redcpln[0] * redjpln[1]);
@@ -258,12 +270,19 @@ public:
             // a wildly unlikely but nonetheless deadly case
             edges[j].i2 = -std::numeric_limits<double>::infinity();
           }
+
+          std::cout << "edges[j].i1: " << edges[j].i1 << std::endl;
+          std::cout << "edges[j].i2: " << edges[j].i2 << std::endl;
+
           if (edges[j].i1 >= edges[j].i2) {
             // edge is either useless or proves infeasibility
             // also j != 0 since edges[0].i1 = NaN
-            v::DVec<2> &redppln =
-                reductions[dim][edges[j - 1].pln.dim][edges[j - 1].pln.forward];
+            v::DVec<2> &redppln = reductions[dim][edges[j - 1].pln];
+
+            std::cout << "redppln: " << redppln[0] << " " << redppln[1] << std::endl;
+
             if (redppln[0] * redcpln[1] - redppln[1] * redcpln[0] <= 0) {
+              std::cout << "YOOOOOOOOOOOOOOOOOOOOOOOOOOO" << std::endl;
               feasible = false;
               break;
             }
@@ -272,60 +291,63 @@ public:
           break;
         }
         if (!feasible) {
+          std::cout << "this is the case. Infeasible straight" << std::endl;
           break;
         }
-        v::DVec<2> &redjpln =
-            reductions[dim][edges[j].pln.dim][edges[j].pln.forward];
-        double jcc = cc[edges[j].pln.dim][edges[j].pln.forward];
-        v::DVec<2> &cplnbp = planebps[cpln.dim][cpln.forward];
+        v::DVec<2> &redjpln = reductions[dim][edges[j].pln];
+        double jcc = cc[edges[j].pln];
+        v::DVec<2> &cplnbp = planebps[cpln];
+
+        std::cout << "redjpln: " << redjpln[0] << " " << redjpln[1] << std::endl;
+        std::cout << "jcc: " << jcc << std::endl;
+        std::cout << "cplnbp: " << cplnbp[0] << " " << cplnbp[1] << std::endl;
+
         edgeCount = j + 1;
         edges[edgeCount++] = {
             cpln,
             (jcc - v::dot(redjpln, cplnbp)) /
                 (redjpln[0] * redcpln[1] - redjpln[1] * redcpln[0]),
-            std::numeric_limits<double>::quiet_NaN()};
+            std::numeric_limits<double>::infinity()};
       }
       if (!feasible) {
+        // DEBUGLINE______________________________________________________________________________
+        DEBUGVALUE++;
+
         continue;
       }
       EdgeEntry *edgesBeg = edges;
       EdgeEntry *edgesEnd = edges + edgeCount - 1;
-      v::DVec<2> redeepln =
-          reductions[dim][edgesEnd->pln.dim][edgesEnd->pln.forward];
-      double eecc = cc[edgesEnd->pln.dim][edgesEnd->pln.forward];
-      v::DVec<2> bplnbp = planebps[edgesBeg->pln.dim][edgesBeg->pln.forward];
+      v::DVec<2> redeepln = reductions[dim][edgesEnd->pln];
+      double eecc = cc[edgesEnd->pln];
+      v::DVec<2> bplnbp = planebps[edgesBeg->pln];
       while (true) {
         v::DVec<2> &redbpln =
-            reductions[dim][edgesBeg->pln.dim][edgesBeg->pln.forward];
+            reductions[dim][edgesBeg->pln];
         edgesBeg->i1 = (eecc - v::dot(redeepln, bplnbp)) /
                        (redeepln[0] * redbpln[1] - redeepln[1] * redbpln[0]);
         if (edgesBeg->i1 >= edgesBeg->i2) {
           edgesBeg++;
-          v::DVec<2> &rednpln =
-              reductions[dim][edgesBeg[1].pln.dim][edgesBeg[1].pln.forward];
-          bplnbp = planebps[edgesBeg->pln.dim][edgesBeg->pln.forward];
-          double ncc = cc[edgesBeg[1].pln.dim][edgesBeg[1].pln.forward];
+          v::DVec<2> &rednpln = reductions[dim][edgesBeg[1].pln];
+          bplnbp = planebps[edgesBeg->pln];
+          double ncc = cc[edgesBeg[1].pln];
           edgesBeg->i2 = (ncc - v::dot(rednpln, bplnbp)) /
                          -(rednpln[1] * redbpln[0] - rednpln[0] * redbpln[1]);
           continue;
         }
         break;
       }
-      v::DVec<2> redbpln =
-          reductions[dim][edgesBeg->pln.dim][edgesBeg->pln.forward];
-      double bcc = cc[edgesBeg->pln.dim][edgesBeg->pln.forward];
-      v::DVec<2> eeplnbp = planebps[edgesEnd->pln.dim][edgesEnd->pln.forward];
+      v::DVec<2> redbpln = reductions[dim][edgesBeg->pln];
+      double bcc = cc[edgesBeg->pln];
+      v::DVec<2> eeplnbp = planebps[edgesEnd->pln];
       while (true) {
-        v::DVec<2> &redeepln =
-            reductions[dim][edgesEnd->pln.dim][edgesEnd->pln.forward];
+        v::DVec<2> &redeepln = reductions[dim][edgesEnd->pln];
         edgesEnd->i2 = (bcc - v::dot(redbpln, eeplnbp)) /
                        -(redbpln[1] * redeepln[0] - redbpln[0] * redeepln[1]);
         if (edgesEnd->i1 >= edgesEnd->i2) {
           edgesEnd--;
-          v::DVec<2> &redppln =
-              reductions[dim][edgesEnd[-1].pln.dim][edgesEnd[-1].pln.forward];
-          eeplnbp = planebps[edgesBeg->pln.dim][edgesBeg->pln.forward];
-          double pcc = cc[edgesEnd[-1].pln.dim][edgesEnd[-1].pln.forward];
+          v::DVec<2> &redppln = reductions[dim][edgesEnd[-1].pln];
+          eeplnbp = planebps[edgesBeg->pln];
+          double pcc = cc[edgesEnd[-1].pln];
           edgesEnd->i1 = (pcc - v::dot(redppln, eeplnbp)) /
                          (redppln[0] * redeepln[1] - redppln[1] * redeepln[0]);
           continue;
@@ -337,7 +359,10 @@ public:
       EdgeEntry *eiter = edgesBeg;
       std::size_t vertexCount = 0;
       for (;; vertexCount++, ++eiter) {
-        v::DVec<2> vertex2 = planebps[eiter->pln.dim][eiter->pln.forward];
+        v::DVec<2> vertex2 = planebps[eiter->pln];
+        v::DVec<2> rednorm = reductions[dim][eiter->pln];
+        vertex2[0] += eiter->i1 * rednorm[1];
+        vertex2[1] -= eiter->i1 * rednorm[0];
         vertices[vertexCount++] =
             vertex2[0] * side1[dim] + vertex2[1] * side2[dim];
         if (eiter >= edgesEnd) {
@@ -374,7 +399,12 @@ public:
         *out++ = g;
         *out++ = b;
         *out++ = a;
+
+        std::cout << vertices[0][0] << " " << vertices[0][1] << " " << vertices[0][2] << "     " << vertices[i][0] << " " << vertices[i][1] << " " << vertices[i][2] << "      " << vertices[i + 1][0] << " " << vertices[i + 1][1] << " " << vertices[i + 1][2] << std::endl;
       }
+
+      // DEBUGLINE____________________________________________________________________________________________________________
+      break;
     } // end for (...)
     return out;
   } // end fillVertexAttribPointer(...)

@@ -95,7 +95,7 @@ struct GLProgram {
   void setProjMat(GLfloat width2, GLfloat height2, GLfloat dist) {
     GLfloat mat[][4] = {{1 / width2, 0, 0, 0},
                         {0, 1 / height2, 0, 0},
-                        {0, 0, (dist + 2) / dist, 2 * (dist + 1) / dist},
+                        {0, 0, (dist + 2) / dist, -2 * (dist + 1) / dist},
                         {0, 0, 1, 0}};
     glUniformMatrix4fv(projMatLoc, 1, GL_TRUE, &mat[0][0]);
   }

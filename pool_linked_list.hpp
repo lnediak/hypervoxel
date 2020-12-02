@@ -6,8 +6,8 @@
 namespace hypervoxel {
 
 /**
-  Please don't insert more than `maxSize` elements. It will segfault.
-  Also don't remove the head. It might not segfault, but it will misbehave.
+  Please don't insert more than `maxSize` elements. It might segfault.
+  Also don't remove the head. It probably won't segfault, but it will misbehave.
 */
 template <class T> class PoolLinkedList {
 
@@ -39,8 +39,8 @@ public:
   PoolLinkedList(std::size_t maxSize)
       : pool(new Node[maxSize + 1]), stack(new std::size_t[maxSize]),
         ind(maxSize), maxSize(maxSize), head(pool.get()) {
-    for (std::size_t i = maxSize; i--;) {
-      stack[i] = i + 1;
+    for (std::size_t i = maxSize, j = 0; i--; j++) {
+      stack[j] = i + 1;
     }
     head->prev = head;
     head->next = head;
@@ -48,8 +48,8 @@ public:
 
   PoolLinkedList()
       : pool(new Node[9]), stack(new std::size_t[8]), ind(8), head(pool.get()) {
-    for (std::size_t i = 8; i--;) {
-      stack[i] = i + 1;
+    for (std::size_t i = 8, j = 0; i--; j++) {
+      stack[j] = i + 1;
     }
     head->prev = head;
     head->next = head;
@@ -57,8 +57,8 @@ public:
 
   void clear() {
     ind = maxSize;
-    for (std::size_t i = maxSize; i--;) {
-      stack[i] = i + 1;
+    for (std::size_t i = maxSize, j = 0; i--; j++) {
+      stack[j] = i + 1;
     }
     head->prev = head;
     head->next = head;
@@ -141,8 +141,8 @@ public:
     nn->obj = obj;
     nn->prev = p;
     nn->next = node;
-    p->next = node;
-    node->prev = node;
+    p->next = nn;
+    node->prev = nn;
     return nn;
   }
   Node *insertBefore(Node *node, T &&obj) {
@@ -151,8 +151,8 @@ public:
     nn->obj = obj;
     nn->prev = p;
     nn->next = node;
-    p->next = node;
-    node->prev = node;
+    p->next = nn;
+    node->prev = nn;
     return nn;
   }
   Node *insertAfter(Node *node, const T &obj) {
@@ -161,8 +161,8 @@ public:
     nn->obj = obj;
     nn->prev = node;
     nn->next = n;
-    n->prev = node;
-    node->next = node;
+    n->prev = nn;
+    node->next = nn;
     return nn;
   }
   Node *insertAfter(Node *node, T &&obj) {
@@ -171,8 +171,8 @@ public:
     nn->obj = obj;
     nn->prev = node;
     nn->next = n;
-    n->prev = node;
-    node->next = node;
+    n->prev = nn;
+    node->next = nn;
     return nn;
   }
 

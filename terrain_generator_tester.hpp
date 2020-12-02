@@ -12,12 +12,12 @@ template <std::size_t N> struct TerrainGeneratorTester {
 
   template <std::size_t M, class = typename std::enable_if<M >= N>::type>
   std::uint32_t operator()(const v::IVec<M> &coord) const {
-    return 0xFFFFFFFFU * (get(coord) % mod == 0);
+    return 0xFFFFFFFFU * (get(coord) % mod == 1);
   }
 
   template <std::size_t M> std::size_t get(const v::IVec<M> &coord) const {
-    return (TerrainGeneratorTester<N - 1>{mod, off}.get(coord) * off +
-           coord[N - 1]) * (coord[N - 1] >= 0);
+    std::size_t prevResult = TerrainGeneratorTester<N - 1>{mod, off}.get(coord);
+    return prevResult * off + coord[N - 1];
   }
 };
 
@@ -27,11 +27,11 @@ template <> struct TerrainGeneratorTester<1> {
 
   template <std::size_t M, class = typename std::enable_if<M >= 1>::type>
   std::uint32_t operator()(const v::IVec<M> &coord) const {
-    return 0xFFFFFFFFU * (get(coord) % mod == 0);
+    return 0xFFFFFFFFU * (get(coord) % mod == 1);
   }
 
   template <std::size_t M> std::size_t get(const v::IVec<M> &coord) const {
-    return coord[0] * (coord[0] >= 0);
+    return coord[0];
   }
 };
 
