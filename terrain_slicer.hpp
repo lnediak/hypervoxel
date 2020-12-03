@@ -145,7 +145,7 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
             lines->arr = p2rr;
             lines->brr = p1rr;
           }
-          lines->dfdf = v::norm(lines->b - lines->a);
+          lines->dfdf = v::dist(lines->a, lines->b);
           lines->adf = v::dot(lines->a - vcam, lines->b - lines->a);
           lines->bdf = v::dot(lines->b - vcam, lines->b - lines->a);
           double ab = v::dot(lines->a - vcam, lines->b - vcam);

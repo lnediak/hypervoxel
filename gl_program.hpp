@@ -110,7 +110,8 @@ struct GLProgram {
     glVertexAttribPointer(posLoc, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float),
                           nullptr);
     glVertexAttribPointer(colLoc, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float),
-                          static_cast<float *>(nullptr) + 3);
+                          reinterpret_cast<void *>(
+                              static_cast<std::uintptr_t>(sizeof(float) * 3)));
 
     glDrawArrays(GL_TRIANGLES, 0, (triangles_end - triangles) / 7);
   }

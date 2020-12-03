@@ -140,13 +140,17 @@ template <class T, std::size_t N, class A, class B>
 using ElementwiseMax = BinaryOp<T, N, MaxU, A, B>;
 template <class T, std::size_t N, class A> using Max = Combine<T, N, MaxU, A>;
 
+} // namespace v
+
+} // namespace hypervoxel
+
 template <
     class A, class B, class = typename A::thisisavvec,
     class = typename B::thisisavvec,
     class = typename std::enable_if<
         std::is_same<typename A::value_type, typename B::value_type>::value &&
         A::size == B::size>::type>
-Add<typename A::value_type, A::size, A, B> operator+(const A &a, const B &b) {
+hypervoxel::v::Add<typename A::value_type, A::size, A, B> operator+(const A &a, const B &b) {
   return {a, b};
 }
 
@@ -156,7 +160,7 @@ template <
     class = typename std::enable_if<
         std::is_same<typename A::value_type, typename B::value_type>::value &&
         A::size == B::size>::type>
-Sub<typename A::value_type, A::size, A, B> operator-(const A &a, const B &b) {
+hypervoxel::v::Sub<typename A::value_type, A::size, A, B> operator-(const A &a, const B &b) {
   return {a, b};
 }
 
@@ -166,7 +170,7 @@ template <
     class = typename std::enable_if<
         std::is_same<typename A::value_type, typename B::value_type>::value &&
         A::size == B::size>::type>
-Mult<typename A::value_type, A::size, A, B> operator*(const A &a, const B &b) {
+hypervoxel::v::Mult<typename A::value_type, A::size, A, B> operator*(const A &a, const B &b) {
   return {a, b};
 }
 
@@ -176,9 +180,28 @@ template <
     class = typename std::enable_if<
         std::is_same<typename A::value_type, typename B::value_type>::value &&
         A::size == B::size>::type>
-Div<typename A::value_type, A::size, A, B> operator/(const A &a, const B &b) {
+hypervoxel::v::Div<typename A::value_type, A::size, A, B> operator/(const A &a, const B &b) {
   return {a, b};
 }
+
+template <
+    class A, class B, class = typename A::thisisavvec,
+    class = typename B::thisisavvec,
+    class = typename std::enable_if<
+        std::is_same<typename A::value_type, typename B::value_type>::value &&
+        A::size == B::size>::type>
+bool operator==(const A &a, const B &b) {
+  for (std::size_t i = A::size; i--;) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+namespace hypervoxel {
+
+namespace v {
 
 template <
     class A, class B, class = typename A::thisisavvec,
@@ -200,21 +223,6 @@ template <
 ElementwiseMax<typename A::value_type, A::size, A, B>
 elementwiseMax(const A &a, const B &b) {
   return {a, b};
-}
-
-template <
-    class A, class B, class = typename A::thisisavvec,
-    class = typename B::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename A::value_type, typename B::value_type>::value &&
-        A::size == B::size>::type>
-bool operator==(const A &a, const B &b) {
-  for (std::size_t i = A::size; i--;) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
 }
 
 template <class T, std::size_t N, class A> struct UnaryNeg {
@@ -244,47 +252,6 @@ template <class T, class A> struct UnaryNeg<T, 0, A> {
 
   void evaluateInto(T *) {}
 };
-
-template <class A, class = typename A::thisisavvec>
-UnaryNeg<typename A::value_type, A::size, A> operator-(const A &a) {
-  return {a};
-}
-
-template <class A, class = typename A::thisisavvec>
-SAdd<typename A::value_type, A::size, A> operator+(const A &a,
-                                                   typename A::value_type s) {
-  return {a, s};
-}
-
-template <class A, class = typename A::thisisavvec>
-SAdd<typename A::value_type, A::size, A> operator+(typename A::value_type s,
-                                                   const A &a) {
-  return {a, s};
-}
-
-template <class A, class = typename A::thisisavvec>
-SSub<typename A::value_type, A::size, A> operator-(const A &a,
-                                                   typename A::value_type s) {
-  return {a, s};
-}
-
-template <class A, class = typename A::thisisavvec>
-SMult<typename A::value_type, A::size, A> operator*(const A &a,
-                                                    typename A::value_type s) {
-  return {a, s};
-}
-
-template <class A, class = typename A::thisisavvec>
-SMult<typename A::value_type, A::size, A> operator*(typename A::value_type s,
-                                                    const A &a) {
-  return {a, s};
-}
-
-template <class A, class = typename A::thisisavvec>
-SDiv<typename A::value_type, A::size, A> operator/(const A &a,
-                                                   typename A::value_type s) {
-  return {a, s};
-}
 
 template <class T, std::size_t N, class A> struct ReverseScalarDiv {
 
@@ -316,11 +283,60 @@ struct ReverseScalarDiv<T, 0, A> {
   void evaluateInto(T *) const {}
 };
 
+} // namespace v
+
+} // namespace hypervoxel
+
 template <class A, class = typename A::thisisavvec>
-ReverseScalarDiv<typename A::value_type, A::size, A>
+hypervoxel::v::UnaryNeg<typename A::value_type, A::size, A> operator-(const A &a) {
+  return {a};
+}
+
+template <class A, class = typename A::thisisavvec>
+hypervoxel::v::SAdd<typename A::value_type, A::size, A> operator+(const A &a,
+                                                   typename A::value_type s) {
+  return {a, s};
+}
+
+template <class A, class = typename A::thisisavvec>
+hypervoxel::v::SAdd<typename A::value_type, A::size, A> operator+(typename A::value_type s,
+                                                   const A &a) {
+  return {a, s};
+}
+
+template <class A, class = typename A::thisisavvec>
+hypervoxel::v::SSub<typename A::value_type, A::size, A> operator-(const A &a,
+                                                   typename A::value_type s) {
+  return {a, s};
+}
+
+template <class A, class = typename A::thisisavvec>
+hypervoxel::v::SMult<typename A::value_type, A::size, A> operator*(const A &a,
+                                                    typename A::value_type s) {
+  return {a, s};
+}
+
+template <class A, class = typename A::thisisavvec>
+hypervoxel::v::SMult<typename A::value_type, A::size, A> operator*(typename A::value_type s,
+                                                    const A &a) {
+  return {a, s};
+}
+
+template <class A, class = typename A::thisisavvec>
+hypervoxel::v::SDiv<typename A::value_type, A::size, A> operator/(const A &a,
+                                                   typename A::value_type s) {
+  return {a, s};
+}
+
+template <class A, class = typename A::thisisavvec>
+hypervoxel::v::ReverseScalarDiv<typename A::value_type, A::size, A>
 operator/(typename A::value_type s, const A &a) {
   return {s, a};
 }
+
+namespace hypervoxel {
+
+namespace v {
 
 template <class A, class = typename A::thisisavvec>
 typename A::value_type sum(const A &a) {

@@ -37,7 +37,8 @@ int main() {
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
 
-  double pdists[] = {25, 23.91, 22.714, 21.375, 19.843, 18.028, 15.749, 12.5};
+  //double pdists[] = {25, 23.91, 22.714, 21.375, 19.843, 18.028, 15.749, 12.5};
+  double pdists[] = {25};
   double sq12 = std::sqrt(.5);
   hypervoxel::SliceDirs<4> sd = {{0, 0, 0, 0},
                                  {sq12, -sq12, 0, 0},
@@ -46,7 +47,7 @@ int main() {
                                  1,
                                  1};
   hypervoxel::TerrainRenderer<4, hypervoxel::TerrainGeneratorTester> renderer(
-      hypervoxel::TerrainGeneratorTester<4>{2, 1}, 8, pdists, sd);
+      hypervoxel::TerrainGeneratorTester<4>{2, 1}, 1, pdists, sd);
   const std::size_t lenTriangles = 21 * 65536;
   std::unique_ptr<float[]> triangles(new float[lenTriangles]);
   float *triangles_end = triangles.get() + lenTriangles;
