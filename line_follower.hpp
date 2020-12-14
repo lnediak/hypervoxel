@@ -161,7 +161,7 @@ public:
       }
       for (; lines != lines_end; ++lines) {
 
-        std::cout << "new line" << std::endl;
+        //std::cout << "new line" << std::endl;
 
         if (lines->arr > dist2 || lines->brr < dist1) {
           continue;
@@ -169,9 +169,9 @@ public:
         v::DVec<N> a = lines->a;
         v::DVec<N> b = lines->b;
 
-        std::cout << std::endl << std::endl << std::endl;
-        std::cout << "------------a b" << std::endl;
-        for (std::size_t i = 0; i < N; i++) std::cout << a[i] << " " << b[i] << std::endl;
+        //std::cout << std::endl << std::endl << std::endl;
+        //std::cout << "------------a b" << std::endl;
+        //for (std::size_t i = 0; i < N; i++) std::cout << a[i] << " " << b[i] << std::endl;
 
         v::DVec<N> df = b - a;
         if (dist1s - lines->arr >= 1e-8) {
@@ -185,9 +185,9 @@ public:
                lines->dfdf;
         }
 
-        std::cout << "-------------ma b" << std::endl;
-        for (std::size_t i = 0; i < N; i++) std::cout << a[i] << " " << b[i] << std::endl;
-        std::cout << "----------------" << std::endl;
+        //std::cout << "-------------ma b" << std::endl;
+        //for (std::size_t i = 0; i < N; i++) std::cout << a[i] << " " << b[i] << std::endl;
+        //std::cout << "----------------" << std::endl;
 
         v::IVec<N> coord = DVecFloor<N>{a};
         v::DVec<N> pos = a;
@@ -198,8 +198,8 @@ public:
         while (true) {
           if (ndist >= 1e-8) {
 
-            for (std::size_t i = 0; i < N; i++) std::cout << coord[i] << " ";
-            std::cout << std::endl;
+            //for (std::size_t i = 0; i < N; i++) std::cout << coord[i] << " ";
+            //std::cout << std::endl;
 
             out.addCube(coord, terGen(coord));
             coord[lines->dim1]--;
@@ -219,14 +219,14 @@ public:
           pos = a + df * dist;
           coord = DVecFloor<N>{pos};
 
-          std::cout << "offs ";
-          for (std::size_t i = 0; i < N; i++) std::cout << offs[i] << " ";
-          std::cout << std::endl;
-          std::cout << "ndist " << ndist << std::endl;
-          std::cout << "dist " << dist << std::endl;
-          std::cout << "pos ";
-          for (std::size_t i = 0; i < N; i++) std::cout << pos[i] << " ";
-          std::cout << std::endl;
+          //std::cout << "offs ";
+          //for (std::size_t i = 0; i < N; i++) std::cout << offs[i] << " ";
+          //std::cout << std::endl;
+          //std::cout << "ndist " << ndist << std::endl;
+          //std::cout << "dist " << dist << std::endl;
+          //std::cout << "pos ";
+          //for (std::size_t i = 0; i < N; i++) std::cout << pos[i] << " ";
+          //std::cout << std::endl;
 
         }
       }
