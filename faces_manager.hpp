@@ -71,10 +71,10 @@ public:
     if (!(val & 0xFF)) {
       return true;
     }
-    if (list.invSize() < N) {
+    if (list.invSize() < 2) {
       return false;
     }
-    if (map.bucket_count() - map.size() <= N) {
+    if (map.bucket_count() - map.size() < 2) {
       return false;
     }
     for (std::size_t dim = N; dim--;) {
@@ -89,13 +89,6 @@ public:
 
       auto pp = map.emplace(f1, Entry{});
       auto next = pp.first;
-      if (pp.second) {
-        next->second.color = val;
-        next->second.listEntry = list.addToBeg(next);
-      }
-
-      pp = map.emplace(f1, Entry{});
-      next = pp.first;
       Entry &e1 = next->second;
       if (e1.faces[dim] == 0) {
         e1.faces[dim] = 2;

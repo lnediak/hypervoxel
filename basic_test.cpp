@@ -37,8 +37,9 @@ int main() {
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
 
-  //double pdists[] = {25, 23.91, 22.714, 21.375, 19.843, 18.028, 15.749, 12.5};
-  double pdists[] = {25};
+  double pdists[] = {25, 23.91, 22.714, 21.375, 19.843, 18.028, 15.749, 12.5};
+  //double pdists[] = {50, 47.82, 45.428, 42.75, 39.686, 36.056, 31.498, 25};
+  //double pdists[] = {25};
   double sq12 = std::sqrt(.5);
   hypervoxel::SliceDirs<4> sd = {{0.1, 0.1, 0.1, 0.1},
                                  {sq12, -sq12, 0, 0},
@@ -48,12 +49,12 @@ int main() {
                                  1};
   hypervoxel::TerrainRenderer<4, hypervoxel::TerrainGeneratorTester> renderer(
       hypervoxel::TerrainGeneratorTester<4>{56, 11}, 1, pdists, sd);
-  const std::size_t lenTriangles = 21 * 65536;
+  const std::size_t lenTriangles = 21 * 1048576;
   std::unique_ptr<float[]> triangles(new float[lenTriangles]);
   float *triangles_end = triangles.get() + lenTriangles;
   GLProgram prog;
   prog.compileProgram(lenTriangles);
-  prog.setProjMat(sd.width2, sd.height2, pdists[0]);
+  prog.setProjMat(sd.width2, sd.height2, pdists[0] + 2);
 
   std::size_t fpsCount = 0;
   auto beg = std::chrono::high_resolution_clock::now();
@@ -64,7 +65,7 @@ int main() {
 
     float *tmpend = renderer.writeTriangles(sd, triangles.get(), triangles_end);
     prog.renderTriangles(triangles.get(), tmpend);
-    sd.cam += 0.04;
+    sd.cam += 0.01;
 
     auto dur = std::chrono::high_resolution_clock::now() - beg;
     double secs =

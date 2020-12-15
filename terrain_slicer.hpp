@@ -56,7 +56,8 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
                              {0, 4}, {1, 4}, {2, 4}, {3, 4}};
   int planes[N * 2];
   for (std::size_t i = N; i--;) {
-    planes[i] = std::floor(vcam[i]);
+    planes[i] = vcam[i];
+    planes[i] -= vcam[i] < planes[i];
     planes[i + N] = planes[i] + 1;
   }
   for (std::size_t i = N * 2; i--;) {
@@ -103,7 +104,8 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
       }
       int planes2[N * 2];
       for (std::size_t j = N; j--;) {
-        planes2[j] = std::floor(itions[0].p[j]);
+        planes2[j] = itions[0].p[j];
+        planes2[j] -= itions[0].p[j] < planes2[j];
         planes2[j + N] = planes2[j] + 1;
       }
       for (std::size_t ii = i; ii--;) {
