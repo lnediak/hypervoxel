@@ -84,7 +84,7 @@ public:
       }
     }
     for (std::size_t i = numThreads; i--;) {
-      out = facesManagers[i].fillVertexAttribPointer(sd, out, out_fend);
+      out = facesManagers[i].fillVertexAttribPointer(out, out_fend);
     }
     return out;
   }

@@ -165,8 +165,11 @@ public:
         }
         v::DVec<N> a = lines->a;
         v::DVec<N> b = lines->b;
+        v::DVec<3> a3 = lines->a3;
+        v::DVec<3> b3 = lines->b3;
 
         v::DVec<N> df = b - a;
+        v::DVec<3> df3 = b3 - a3;
         if (dist1s - lines->arr >= 1e-8) {
           a += df *
                (std::sqrt(lines->pdiscr + lines->dfdf * dist1s + 1e-12) - lines->adf) /
@@ -182,23 +185,20 @@ public:
         v::DVec<N> pos = a;
         v::DVec<N> invdf = 1. / df;
         v::DVec<N> sigdf1 = DVecSign1<N>{invdf};
+        v::DVec<3> ppos3 = a3;
         double dist = 0;
-        double ndist = 1e-8;
         while (true) {
-          if (ndist >= 1e-8) {
-            out.addCube(coord, terGen(coord));
-            coord[lines->dim1]--;
-            out.addCube(coord, terGen(coord));
-            coord[lines->dim2]--;
-            out.addCube(coord, terGen(coord));
-            coord[lines->dim1]++;
-            out.addCube(coord, terGen(coord));
-          }
-          v::DVec<N> offs = (toDVec(coord) + sigdf1 - pos) * invdf;
+          v::DVec<N> offs = (toDVec(coord) - pos + sigdf1) * invdf;
           double ndist = v::min(offs);
           dist += ndist + 1e-8;
           if (dist >= 1) {
+            out.addEdge(coord, lines->dim1, lines->dim2, ppos3, b3, terGen);
             break;
+          }
+          if (ndist >= 1e-8) {
+            v::DVec<3> tmp = a3 + df3 * dist;
+            out.addEdge(coord, lines->dim1, lines->dim2, ppos3, tmp, terGen);
+            ppos3 = tmp;
           }
           pos = a + df * dist;
           coord = DVecFloor<N>{pos};
