@@ -33,23 +33,34 @@ struct Color {
 
 template <std::size_t N>
 inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
+  constexpr double maxDiag = std::sqrt(N);
+  double roff, uoff, foff;
+  if (sd.width2 > sd.height2) {
+    roff = maxDiag * sd.width2 / sd.height2;
+    uoff = maxDiag;
+    foff = maxDiag / sd.height2;
+  } else {
+    roff = maxDiag;
+    uoff = maxDiag * sd.height2 / sd.width2;
+    foff = maxDiag / sd.width2;
+  }
+  roff += sd.width2 * dist;
+  uoff += sd.height2 * dist;
   v::DVec<N> vcam = sd.cam;
-  v::DVec<N> vfor = sd.forward;
-  vfor *= dist;
-  v::DVec<N> vright = sd.right;
-  vright *= sd.width2 * dist;
-  v::DVec<N> vup = sd.up;
-  vup *= sd.height2 * dist;
-  v::DVec<N> p1 = vcam;
+  v::DVec<N> vfor = sd.forward * dist;
+  v::DVec<N> vright = sd.right * roff;
+  v::DVec<N> vup = sd.up * uoff;
+
+  v::DVec<N> p1 = vcam - sd.forward * foff;
   v::DVec<N> p2 = vcam + vfor - vright - vup;
   v::DVec<N> p3 = vcam + vfor - vright + vup;
   v::DVec<N> p4 = vcam + vfor + vright + vup;
   v::DVec<N> p5 = vcam + vfor + vright - vup;
-  v::DVec<3> p13 = {0, 0, 0};
-  v::DVec<3> p23 = {dist, -sd.width2 * dist, -sd.height2 * dist};
-  v::DVec<3> p33 = {dist, -sd.width2 * dist, +sd.height2 * dist};
-  v::DVec<3> p43 = {dist, +sd.width2 * dist, +sd.height2 * dist};
-  v::DVec<3> p53 = {dist, +sd.width2 * dist, -sd.height2 * dist};
+  v::DVec<3> p13 = {0, 0, -foff};
+  v::DVec<3> p23 = {-roff, -uoff, dist};
+  v::DVec<3> p33 = {-roff, +uoff, dist};
+  v::DVec<3> p43 = {+roff, +uoff, dist};
+  v::DVec<3> p53 = {+roff, -uoff, dist};
   struct LineRange {
     v::DVec<N> p1, p2;
     v::DVec<N> min, max;
@@ -68,44 +79,50 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
                            {p4, p5, p43, p53}, {p2, p5, p23, p53}};
   std::size_t faceis[][2] = {{0, 3}, {0, 1}, {1, 2}, {2, 3},
                              {0, 4}, {1, 4}, {2, 4}, {3, 4}};
-  int planes[N * 2];
-  for (std::size_t i = N; i--;) {
-    planes[i] = vcam[i];
-    planes[i] -= vcam[i] < planes[i];
-    planes[i + N] = planes[i] + 1;
+  int planes[N];
+  for (std::size_t i = N; i-- > 1;) {
+    const v::DVec<N> *ps[] = {&p1, &p2, &p3, &p4, &p5};
+    double val = (*ps[0])[i];
+    for (std::size_t k = 1; k < 5; k++) {
+      double tmp = (*ps[k])[i];
+      if (tmp > val) {
+        val = tmp;
+      }
+    }
+    planes[i] = val;
+    planes[i] -= val <= planes[i];
   }
-  for (std::size_t i = N * 2; i--;) {
-    std::size_t dim = i >= N ? i - N : i;
-    for (int plane = planes[i];; i >= N ? plane++ : plane--) {
+  for (std::size_t dim1 = N; dim1-- > 1;) {
+    for (int plane1 = planes[dim1];; plane1--) {
       struct Intersection {
         bool isReal = false;
         std::size_t linei = -1;
         v::DVec<N> p;
         v::DVec<3> p3;
       };
-      Intersection itions[5];
-      std::size_t itionc = 0;
+      Intersection itions1[5];
+      std::size_t itionc1 = 0;
       for (std::size_t j = 8; j--;) {
         LineRange l = origlines[j];
-        if (l.min[dim] <= plane && plane < l.max[dim]) {
-          itions[itionc].isReal = true;
-          itions[itionc].linei = j;
-          double offset = l.max[dim] - l.min[dim] >= 1e-8
-                              ? (plane - l.p1[dim]) / (l.p2[dim] - l.p1[dim])
+        if (l.min[dim1] <= plane1 && plane1 < l.max[dim1]) {
+          itions1[itionc1].isReal = true;
+          itions1[itionc1].linei = j;
+          double offset = l.max[dim1] - l.min[dim1] >= 1e-8
+                              ? (plane1 - l.p1[dim1]) / (l.p2[dim1] - l.p1[dim1])
                               : 0.5; // error shouldn't be noticable
-          itions[itionc].p = l.p1 + (l.p2 - l.p1) * offset;
-          itions[itionc].p3 = l.p13 + (l.p23 - l.p13) * offset;
-          itions[itionc++].p[dim] = plane;
+          itions1[itionc1].p = l.p1 + (l.p2 - l.p1) * offset;
+          itions1[itionc1].p3 = l.p13 + (l.p23 - l.p13) * offset;
+          itions1[itionc1++].p[dim1] = plane1;
         }
       }
-      if (!itionc) {
+      if (!itionc1) {
         break;
       }
 
       std::size_t facecs[5] = {0, 0, 0, 0, 0};
       std::size_t faceits[5][2];
-      for (std::size_t k = itionc; k--;) {
-        std::size_t linei = itions[k].linei;
+      for (std::size_t k = itionc1; k--;) {
+        std::size_t linei = itions1[k].linei;
         std::size_t face1 = faceis[linei][0];
         std::size_t face2 = faceis[linei][1];
         faceits[face1][facecs[face1]++] = k;
@@ -118,24 +135,37 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
         }
         std::size_t fi0 = faceits[k][0];
         std::size_t fi1 = faceits[k][1];
-        lines2d[c++] = {itions[fi0].p, itions[fi1].p, itions[fi0].p3,
-                        itions[fi1].p3};
-      }
-      int planes2[N * 2];
-      for (std::size_t j = N; j--;) {
-        planes2[j] = itions[0].p[j];
-        planes2[j] -= itions[0].p[j] < planes2[j];
-        planes2[j + N] = planes2[j] + 1;
-      }
-      for (std::size_t ii = i; ii--;) {
-        std::size_t dim2 = ii >= N ? ii - N : ii;
-        if (dim == dim2) {
-          continue;
+        lines2d[c++] = {itions1[fi0].p, itions1[fi1].p, itions1[fi0].p3,
+                        itions1[fi1].p3};
+
+/*
+        if (dim1 == 2 && plane1 == 2) {
+          std::cout << "lines2d[" << c << "]: " << std::endl;
+          std::cout << "itions1[fi0].p: " << itions1[fi0].p[0] << " " << itions1[fi0].p[1] << " " << itions1[fi0].p[2] << " " << itions1[fi0].p[3] << std::endl;
+          std::cout << "itions1[fi1].p: " << itions1[fi1].p[0] << " " << itions1[fi1].p[1] << " " << itions1[fi1].p[2] << " " << itions1[fi1].p[3] << std::endl;
+          std::cout << "itions1[fi0].p3: " << itions1[fi0].p3[0] << " " << itions1[fi0].p3[1] << " " << itions1[fi0].p3[2] << std::endl;
+          std::cout << "itions1[fi1].p3: " << itions1[fi1].p3[0] << " " << itions1[fi1].p3[1] << " " << itions1[fi1].p3[2] << std::endl;
         }
-        for (int plane2 = planes2[ii];; ii >= N ? plane2++ : plane2--) {
+*/
+
+      }
+      int planes2[N];
+      for (std::size_t j = N; j--;) {
+        double val = itions1[0].p[j];
+        for (std::size_t k = itionc1; k-- > 1;) {
+          double tmp = itions1[k].p[j];
+          if (tmp > val) {
+            val = tmp;
+          }
+        }
+        planes2[j] = val;
+        planes2[j] -= val <= planes2[j];
+      }
+      for (std::size_t dim2 = dim1; dim2--;) {
+        for (int plane2 = planes2[dim2];; plane2--) {
           Intersection itions2[2];
           std::size_t itionc2 = 0;
-          for (std::size_t j = itionc; j--;) {
+          for (std::size_t j = itionc1; j--;) {
             LineRange l = lines2d[j];
             if (l.min[dim2] <= plane2 && plane2 < l.max[dim2]) {
               itions2[itionc2].isReal = true;
@@ -152,10 +182,14 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
           if (!itionc2) {
             break;
           }
-          lines->dim1 = dim;
+          lines->dim1 = dim1;
           lines->dim2 = dim2;
+          /*
           double p1rr = v::dist(itions2[0].p, vcam);
           double p2rr = v::dist(itions2[1].p, vcam);
+          */
+          double p1rr = itions2[0].p3[2];
+          double p2rr = itions2[1].p3[2];
           if (p1rr < p2rr) {
             lines->a = itions2[0].p;
             lines->a3 = itions2[0].p3;

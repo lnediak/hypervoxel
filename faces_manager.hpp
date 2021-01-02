@@ -78,6 +78,15 @@ template <std::size_t N> class FacesManager {
     e.edges[e.edgeCount++][1] = b;
   }
 
+  template <class BlockData>
+  void storeEdge(const v::IVec<N> &coord, std::size_t dim,
+                 const BlockData &bdata, std::size_t param, const v::DVec<3> &a,
+                 const v::DVec<3> &b) {
+    storeEdge(coord, dim,
+              [&bdata, param]() -> Color { return bdata.getColor(param); }, a,
+              b);
+  }
+
 public:
   FacesManager(std::size_t maxSize, const v::DVec<N> &cam)
       : map(maxSize * 2), list(maxSize), maxSize(maxSize), cam(cam) {}
@@ -91,9 +100,20 @@ public:
 
   void setCam(const double *ncam) { cam.copyFrom(ncam); }
 
-  template <template <std::size_t> class TerGen>
+  /// modifies coord. Do not use afterwards
+  template <class TerGen>
   bool addEdge(v::IVec<N> &coord, std::size_t dim1, std::size_t dim2,
-               v::DVec<3> a, v::DVec<3> b, TerGen<N> &terGen) {
+               v::DVec<3> a, v::DVec<3> b, TerGen &terGen) {
+
+      /*
+      std::cout << "addEdge entered:" << std::endl;
+      std::cout << "coord: " << coord[0] << " " << coord[1] << " " << coord[2] << std::endl;
+      std::cout << "dim1 dim2: " << dim1 << " " << dim2 << std::endl;
+      std::cout << "a: " << a[0] << " " << a[1] << " " << a[2] << std::endl;
+      std::cout << "b: " << b[0] << " " << b[1] << " " << b[2] << std::endl;
+      std::cout << std::endl;
+      */
+
     if (list.invSize() < 2) {
       return false;
     }
@@ -101,22 +121,25 @@ public:
       return false;
     }
 
-    std::int32_t mod1, mod2;
+    std::int32_t mod1 = 1, mod2 = 1;
+    std::int32_t cmod1 = 0, cmod2 = 0;
     std::size_t tdim1 = dim1, tdim2 = dim2;
     if (cam[dim1] < coord[dim1]) {
-      mod1 = 1;
+      cmod1 = 1;
       coord[dim1]--;
     } else {
       mod1 = -1;
       tdim1 += N;
     }
     if (cam[dim2] < coord[dim2]) {
-      mod2 = 1;
+      cmod2 = 1;
       coord[dim2]--;
     } else {
       mod2 = -1;
       tdim2 += N;
     }
+
+      //std::cout << "mod1 mod2 cmod1 cmod2 tdim1 tdim2: " << mod1 << " " << mod2 << " " << cmod1 << " " << cmod2 << " " << tdim1 << " " << tdim2 << std::endl;
 
     auto front = terGen(coord);
     coord[dim1] += mod1;
@@ -126,37 +149,44 @@ public:
     coord[dim1] -= mod1;
     auto s2 = terGen(coord);
     coord[dim2] -= mod2;
+
+/*
+    if (s1.isVisible() || s2.isVisible() || back.isVisible()) {
+      std::cout << std::endl;
+      std::cout << "YAYAYAYAYAYAY" << std::endl;
+      std::cout << "coord: " << coord[0] << " " << coord[1] << " " << coord[2] << " " << coord[3] << std::endl;
+      std::cout << "dim1 dim2: " << dim1 << " " << dim2 << std::endl;
+      std::cout << "mod1 mod2 cmod1 cmod2 tdim1 tdim2: " << mod1 << " " << mod2 << " " << cmod1 << " " << cmod2 << " " << tdim1 << " " << tdim2 << std::endl;
+      std::cout << "a: " << a[0] << " " << a[1] << " " << a[2] << std::endl;
+      std::cout << "b: " << b[0] << " " << b[1] << " " << b[2] << std::endl;
+    }
+*/
+
     if (!front.isOpaque()) {
       if (s1.isVisible()) {
-        storeEdge(
-            coord, dim1,
-            [&s1, tdim1]() -> Color { return s1.template getColor<N>(tdim1); },
-            a, b);
+        coord[dim1] += cmod1;
+        storeEdge(coord, dim1, s1, tdim1, a, b);
+        coord[dim1] -= cmod1;
       }
       if (s2.isVisible()) {
-        storeEdge(
-            coord, dim2,
-            [&s2, tdim2]() -> Color { return s2.template getColor<N>(tdim2); },
-            a, b);
+        coord[dim2] += cmod2;
+        storeEdge(coord, dim2, s2, tdim2, a, b);
+        coord[dim2] -= cmod2;
       }
     }
     if (back.isVisible()) {
       if (!s1.isOpaque()) {
         coord[dim1] += mod1;
-        storeEdge(coord, dim1,
-                  [&back, tdim1]() -> Color {
-                    return back.template getColor<N>(tdim1);
-                  },
-                  a, b);
+        coord[dim2] += cmod2;
+        storeEdge(coord, dim2, back, tdim2, a, b);
+        coord[dim2] -= cmod2;
         coord[dim1] -= mod1;
       }
       if (!s2.isOpaque()) {
         coord[dim2] += mod2;
-        storeEdge(coord, dim2,
-                  [&back, tdim2]() -> Color {
-                    return back.template getColor<N>(tdim2);
-                  },
-                  a, b);
+        coord[dim1] += cmod1;
+        storeEdge(coord, dim1, back, tdim1, a, b);
+        coord[dim1] -= cmod1;
         coord[dim2] -= mod2;
       }
     }

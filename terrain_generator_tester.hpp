@@ -8,11 +8,10 @@
 
 namespace hypervoxel {
 
-struct BoolBlockdata {
+template <std::size_t N> struct BoolBlockdata {
 
   bool val;
 
-  template <std::size_t N>
   Color getColor(std::size_t dir) const {
     std::size_t dim = dir >= N ? dir - N : dir;
     Color toreturn = {0, 0, 0, 0};
@@ -38,18 +37,40 @@ struct BoolBlockdata {
     return toreturn;
   }
 
-  bool isOpaque() const {
-    return val;
-  }
+  bool isOpaque() const { return val; }
 
-  bool isVisible() const {
-    return val;
+  bool isVisible() const { return val; }
+};
+
+/*
+template <std::size_t N, class = typename std::enable_if<N == 4>::type>
+struct TerrainGeneratorTester {
+
+  typedef BoolBlockdata<4> blockdata;
+  int mod, off;
+
+  blockdata operator()(const v::IVec<4> &coord) const {
+    return {coord[0] == coord[2] + 1 && coord[1] == coord[2] - 3 &&
+            coord[2] == coord[3] + 2};
   }
 };
+*/
+
+/*
+template <std::size_t N, class = typename std::enable_if<N == 3>::type>
+struct TerrainGeneratorTester {
+
+  typedef BoolBlockdata<3> blockdata;
+
+  blockdata operator()(const v::IVec<3> &coord) const {
+    return {coord[0] == coord[2] && coord[1] == coord[2]};
+  }
+};
+*/
 
 template <std::size_t N> struct TerrainGeneratorTester {
 
-  typedef BoolBlockdata blockdata;
+  typedef BoolBlockdata<N> blockdata;
   int mod, off;
 
   blockdata operator()(const v::IVec<N> &coord) const {
@@ -64,7 +85,7 @@ template <std::size_t N> struct TerrainGeneratorTester {
 
 template <> struct TerrainGeneratorTester<1> {
 
-  typedef BoolBlockdata blockdata;
+  typedef BoolBlockdata<1> blockdata;
   int mod, off;
 
   blockdata operator()(const v::IVec<1> &coord) const {

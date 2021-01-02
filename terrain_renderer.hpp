@@ -11,31 +11,33 @@
 
 namespace hypervoxel {
 
-template <std::size_t N, template <std::size_t> class G> class TerrainRenderer {
+template <std::size_t N, class TerGen> class TerrainRenderer {
 
-  G<N> terGen;
+  TerGen terGen;
   std::unique_ptr<Line<N>[]> lines;
   std::size_t numThreads;
   std::unique_ptr<double[]> dists;
   std::unique_ptr<FacesManager<N>[]> facesManagers;
-  std::unique_ptr<typename LineFollower<N, G>::Controller[]> controllers;
+  std::unique_ptr<typename LineFollower<N, TerGen>::Controller[]> controllers;
   std::unique_ptr<std::thread[]> threads;
 
-  SliceDirs<4> sd;
+  SliceDirs<N> sd;
 
 public:
   /// pdists decreasing
-  TerrainRenderer(G<N> &&terGen, std::size_t numThreads, double *pdists,
+  TerrainRenderer(TerGen &&terGen, std::size_t numThreads, double *pdists,
                   const SliceDirs<N> &sd)
-      : terGen(terGen), lines(new Line<N>[((N * (N - 1)) / 2) *
-                                          static_cast<std::size_t>(
-                                              pdists[0] * pdists[0] *
-                                                  (1 + sd.width2 * sd.width2 +
-                                                   sd.height2 * sd.height2) +
-                                              3 * pdists[0])]),
+      : terGen(terGen),
+        lines(new Line<N>[((N * (N - 1)) / 2) *
+                          static_cast<std::size_t>(
+                              (pdists[0] + 5) * (pdists[0] + 5) *
+                                  (1 + sd.width2 * sd.width2 +
+                                   sd.height2 * sd.height2) +
+                              3 * pdists[0])]),
         numThreads(numThreads), dists(new double[numThreads]),
         facesManagers(new FacesManager<N>[numThreads]),
-        controllers(new typename LineFollower<N, G>::Controller[numThreads]()),
+        controllers(new
+                    typename LineFollower<N, TerGen>::Controller[numThreads]()),
         threads(new std::thread[numThreads]), sd(sd) {
     std::copy(pdists, pdists + numThreads, dists.get());
     double currDist = 0;
@@ -43,15 +45,15 @@ public:
     double multi = (N * N + 5 * N + 6) * std::sqrt(3) / 2;
     double baseAreaD = 4 * multi * sd.width2 * sd.height2 / 6;
     for (std::size_t i = numThreads; i--;) {
-      double newDist = pdists[i];
+      double newDist = pdists[i] + 5;
       double newVolume = newDist * newDist * newDist * baseAreaD;
       facesManagers[i].~FacesManager();
       new (&facesManagers[i]) FacesManager<N>(
           static_cast<std::size_t>(newVolume - currVolume), sd.cam);
       threads[i] = std::thread(
-          LineFollower<N, G>(currDist, newDist,
-                             /*TODO: TerrainCache here*/ G<N>{terGen},
-                             facesManagers[i], controllers[i]));
+          LineFollower<N, TerGen>(currDist, newDist,
+                                  /*TODO: TerrainCache here*/ TerGen{terGen},
+                                  facesManagers[i], controllers[i]));
       currDist = newDist;
       currVolume = newVolume;
     }

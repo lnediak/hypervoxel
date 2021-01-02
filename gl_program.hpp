@@ -45,6 +45,7 @@ struct GLProgram {
     std::string fsrc = "#version 110\n"
                        "varying vec4 outCol;"
                        "void main() {"
+                       "  if (outCol.a < 0.5) discard;"
                        "  gl_FragColor = outCol;"
                        "}";
     GLuint vs = createShader(vsrc, GL_VERTEX_SHADER);
