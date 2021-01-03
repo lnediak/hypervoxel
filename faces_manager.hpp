@@ -104,16 +104,6 @@ public:
   template <class TerGen>
   bool addEdge(v::IVec<N> &coord, std::size_t dim1, std::size_t dim2,
                v::DVec<3> a, v::DVec<3> b, TerGen &terGen) {
-
-      /*
-      std::cout << "addEdge entered:" << std::endl;
-      std::cout << "coord: " << coord[0] << " " << coord[1] << " " << coord[2] << std::endl;
-      std::cout << "dim1 dim2: " << dim1 << " " << dim2 << std::endl;
-      std::cout << "a: " << a[0] << " " << a[1] << " " << a[2] << std::endl;
-      std::cout << "b: " << b[0] << " " << b[1] << " " << b[2] << std::endl;
-      std::cout << std::endl;
-      */
-
     if (list.invSize() < 2) {
       return false;
     }
@@ -139,8 +129,6 @@ public:
       tdim2 += N;
     }
 
-      //std::cout << "mod1 mod2 cmod1 cmod2 tdim1 tdim2: " << mod1 << " " << mod2 << " " << cmod1 << " " << cmod2 << " " << tdim1 << " " << tdim2 << std::endl;
-
     auto front = terGen(coord);
     coord[dim1] += mod1;
     auto s1 = terGen(coord);
@@ -149,18 +137,6 @@ public:
     coord[dim1] -= mod1;
     auto s2 = terGen(coord);
     coord[dim2] -= mod2;
-
-/*
-    if (s1.isVisible() || s2.isVisible() || back.isVisible()) {
-      std::cout << std::endl;
-      std::cout << "YAYAYAYAYAYAY" << std::endl;
-      std::cout << "coord: " << coord[0] << " " << coord[1] << " " << coord[2] << " " << coord[3] << std::endl;
-      std::cout << "dim1 dim2: " << dim1 << " " << dim2 << std::endl;
-      std::cout << "mod1 mod2 cmod1 cmod2 tdim1 tdim2: " << mod1 << " " << mod2 << " " << cmod1 << " " << cmod2 << " " << tdim1 << " " << tdim2 << std::endl;
-      std::cout << "a: " << a[0] << " " << a[1] << " " << a[2] << std::endl;
-      std::cout << "b: " << b[0] << " " << b[1] << " " << b[2] << std::endl;
-    }
-*/
 
     if (!front.isOpaque()) {
       if (s1.isVisible()) {

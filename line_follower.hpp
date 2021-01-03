@@ -153,27 +153,9 @@ public:
         return;
       }
       for (; lines != lines_end; ++lines) {
-        /*
-        if (lines->arr > dist2s || lines->brr < dist1s) {
-          continue;
-        }
-        */
         if (lines->a3[2] > dist2 || lines->b3[2] < dist1) {
           continue;
         }
-
-/*
-          if (lines->dim1 == 2 && lines->a[2] == 2) {
-          std::cout << "LINELINELINELINE" << std::endl;
-          std::cout << "dim1 dim2: " << lines->dim1 << " " << lines->dim2 << std::endl;
-          std::cout << "a: " << lines->a[0] << " " << lines->a[1] << " " << lines->a[2] << " " << lines->a[3] << std::endl;
-          std::cout << "b: " << lines->b[0] << " " << lines->b[1] << " " << lines->b[2] << " " << lines->b[3] << std::endl;
-          std::cout << "a3: " << lines->a3[0] << " " << lines->a3[1] << " " << lines->a3[2] << std::endl;
-          std::cout << "b3: " << lines->b3[0] << " " << lines->b3[1] << " " << lines->b3[2] << std::endl;
-          std::cout << std::endl;
-          }
-*/
-
         v::DVec<N> a = lines->a;
         v::DVec<N> b = lines->b;
         v::DVec<3> a3 = lines->a3;
@@ -181,20 +163,6 @@ public:
 
         v::DVec<N> df = b - a;
         v::DVec<3> df3 = b3 - a3;
-        /*
-        if (dist1s - lines->arr >= 1e-8) {
-          a += df *
-               (std::sqrt(lines->pdiscr + lines->dfdf * dist1s + 1e-12) -
-                lines->adf) /
-               lines->dfdf;
-        }
-        if (lines->brr - dist2s >= 1e-8) {
-          b += df *
-               (std::sqrt(lines->pdiscr + lines->dfdf * dist2s + 1e-12) -
-                lines->bdf) /
-               lines->dfdf;
-        }
-        */
         if (dist1 - a3[2] >= 1e-8) {
           double offset = (dist1 - a3[2]) / df3[2];
           a += df * offset;

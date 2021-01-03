@@ -49,7 +49,7 @@ public:
       double newVolume = newDist * newDist * newDist * baseAreaD;
       facesManagers[i].~FacesManager();
       new (&facesManagers[i]) FacesManager<N>(
-          static_cast<std::size_t>(newVolume - currVolume), sd.cam);
+          static_cast<std::size_t>(newVolume - currVolume) * N / 2, sd.cam);
       threads[i] = std::thread(
           LineFollower<N, TerGen>(currDist, newDist,
                                   /*TODO: TerrainCache here*/ TerGen{terGen},

@@ -23,7 +23,7 @@ template <std::size_t N> struct Line {
 };
 
 template <std::size_t N> struct SliceDirs {
-  v::DVec<N> cam, forward, right, up;
+  v::DVec<N> cam, right, up, forward;
   double width2, height2;
 };
 
@@ -137,17 +137,6 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
         std::size_t fi1 = faceits[k][1];
         lines2d[c++] = {itions1[fi0].p, itions1[fi1].p, itions1[fi0].p3,
                         itions1[fi1].p3};
-
-/*
-        if (dim1 == 2 && plane1 == 2) {
-          std::cout << "lines2d[" << c << "]: " << std::endl;
-          std::cout << "itions1[fi0].p: " << itions1[fi0].p[0] << " " << itions1[fi0].p[1] << " " << itions1[fi0].p[2] << " " << itions1[fi0].p[3] << std::endl;
-          std::cout << "itions1[fi1].p: " << itions1[fi1].p[0] << " " << itions1[fi1].p[1] << " " << itions1[fi1].p[2] << " " << itions1[fi1].p[3] << std::endl;
-          std::cout << "itions1[fi0].p3: " << itions1[fi0].p3[0] << " " << itions1[fi0].p3[1] << " " << itions1[fi0].p3[2] << std::endl;
-          std::cout << "itions1[fi1].p3: " << itions1[fi1].p3[0] << " " << itions1[fi1].p3[1] << " " << itions1[fi1].p3[2] << std::endl;
-        }
-*/
-
       }
       int planes2[N];
       for (std::size_t j = N; j--;) {
@@ -184,32 +173,17 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
           }
           lines->dim1 = dim1;
           lines->dim2 = dim2;
-          /*
-          double p1rr = v::dist(itions2[0].p, vcam);
-          double p2rr = v::dist(itions2[1].p, vcam);
-          */
-          double p1rr = itions2[0].p3[2];
-          double p2rr = itions2[1].p3[2];
-          if (p1rr < p2rr) {
+          if (itions2[0].p3[2] < itions2[1].p3[2]) {
             lines->a = itions2[0].p;
             lines->a3 = itions2[0].p3;
             lines->b = itions2[1].p;
             lines->b3 = itions2[1].p3;
-            lines->arr = p1rr;
-            lines->brr = p2rr;
           } else {
             lines->a = itions2[1].p;
             lines->a3 = itions2[1].p3;
             lines->b = itions2[0].p;
             lines->b3 = itions2[0].p3;
-            lines->arr = p2rr;
-            lines->brr = p1rr;
           }
-          lines->dfdf = v::dist(lines->a, lines->b);
-          lines->adf = v::dot(lines->a - vcam, lines->b - lines->a);
-          lines->bdf = v::dot(lines->b - vcam, lines->b - lines->a);
-          double ab = v::dot(lines->a - vcam, lines->b - vcam);
-          lines->pdiscr = ab * ab - p1rr * p2rr;
           lines++;
         }
       }

@@ -145,54 +145,59 @@ template <class T, std::size_t N, class A> using Max = Combine<T, N, MaxU, A>;
 } // namespace hypervoxel
 
 template <class T>
-using rem_cvr = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
+using rem_cvr =
+    typename std::remove_cv<typename std::remove_reference<T>::type>::type;
 
-template <
-    class A, class B, class = typename rem_cvr<A>::thisisavvec,
-    class = typename rem_cvr<B>::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename rem_cvr<A>::value_type, typename rem_cvr<B>::value_type>::value &&
-        rem_cvr<A>::size == rem_cvr<B>::size>::type>
-hypervoxel::v::Add<typename A::value_type, A::size, A, B> operator+(const A &a, const B &b) {
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
+hypervoxel::v::Add<typename A::value_type, A::size, A, B>
+operator+(const A &a, const B &b) {
   return {a, b};
 }
 
-template <
-    class A, class B, class = typename rem_cvr<A>::thisisavvec,
-    class = typename rem_cvr<B>::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename rem_cvr<A>::value_type, typename rem_cvr<B>::value_type>::value &&
-        rem_cvr<A>::size == rem_cvr<B>::size>::type>
-hypervoxel::v::Sub<typename A::value_type, A::size, A, B> operator-(const A &a, const B &b) {
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
+hypervoxel::v::Sub<typename A::value_type, A::size, A, B>
+operator-(const A &a, const B &b) {
   return {a, b};
 }
 
-template <
-    class A, class B, class = typename rem_cvr<A>::thisisavvec,
-    class = typename rem_cvr<B>::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename rem_cvr<A>::value_type, typename rem_cvr<B>::value_type>::value &&
-        rem_cvr<A>::size == rem_cvr<B>::size>::type>
-hypervoxel::v::Mult<typename A::value_type, A::size, A, B> operator*(const A &a, const B &b) {
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
+hypervoxel::v::Mult<typename A::value_type, A::size, A, B>
+operator*(const A &a, const B &b) {
   return {a, b};
 }
 
-template <
-    class A, class B, class = typename rem_cvr<A>::thisisavvec,
-    class = typename rem_cvr<B>::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename rem_cvr<A>::value_type, typename rem_cvr<B>::value_type>::value &&
-        rem_cvr<A>::size == rem_cvr<B>::size>::type>
-hypervoxel::v::Div<typename A::value_type, A::size, A, B> operator/(const A &a, const B &b) {
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
+hypervoxel::v::Div<typename A::value_type, A::size, A, B>
+operator/(const A &a, const B &b) {
   return {a, b};
 }
 
-template <
-    class A, class B, class = typename rem_cvr<A>::thisisavvec,
-    class = typename rem_cvr<B>::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename rem_cvr<A>::value_type, typename rem_cvr<B>::value_type>::value &&
-        rem_cvr<A>::size == rem_cvr<B>::size>::type>
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
 bool operator==(const A &a, const B &b) {
   for (std::size_t i = A::size; i--;) {
     if (a[i] != b[i]) {
@@ -206,35 +211,33 @@ namespace hypervoxel {
 
 namespace v {
 
-template <
-    class A, class B, class = typename rem_cvr<A>::thisisavvec,
-    class = typename rem_cvr<B>::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename rem_cvr<A>::value_type, typename rem_cvr<B>::value_type>::value &&
-        rem_cvr<A>::size == rem_cvr<B>::size>::type>
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
 struct EqualFunctor {
-  bool operator()(const A &a, const B &b) const noexcept {
-    return a == b;
-  }
+  bool operator()(const A &a, const B &b) const noexcept { return a == b; }
 };
 
-template <
-    class A, class B, class = typename rem_cvr<A>::thisisavvec,
-    class = typename rem_cvr<B>::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename rem_cvr<A>::value_type, typename rem_cvr<B>::value_type>::value &&
-        rem_cvr<A>::size == rem_cvr<B>::size>::type>
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
 ElementwiseMin<typename A::value_type, A::size, A, B>
 elementwiseMin(const A &a, const B &b) {
   return {a, b};
 }
 
-template <
-    class A, class B, class = typename rem_cvr<A>::thisisavvec,
-    class = typename rem_cvr<B>::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename rem_cvr<A>::value_type, typename rem_cvr<B>::value_type>::value &&
-        rem_cvr<A>::size == rem_cvr<B>::size>::type>
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
 ElementwiseMax<typename A::value_type, A::size, A, B>
 elementwiseMax(const A &a, const B &b) {
   return {a, b};
@@ -290,8 +293,7 @@ template <class T, std::size_t N, class A> struct ReverseScalarDiv {
   }
 };
 
-template <class T, class A>
-struct ReverseScalarDiv<T, 0, A> {
+template <class T, class A> struct ReverseScalarDiv<T, 0, A> {
 
   ReverseScalarDiv(T, const A &) {}
 
@@ -303,43 +305,44 @@ struct ReverseScalarDiv<T, 0, A> {
 } // namespace hypervoxel
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::UnaryNeg<typename A::value_type, A::size, A> operator-(const A &a) {
+hypervoxel::v::UnaryNeg<typename A::value_type, A::size, A>
+operator-(const A &a) {
   return {a};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SAdd<typename A::value_type, A::size, A> operator+(const A &a,
-                                                   typename A::value_type s) {
+hypervoxel::v::SAdd<typename A::value_type, A::size, A>
+operator+(const A &a, typename A::value_type s) {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SAdd<typename A::value_type, A::size, A> operator+(typename A::value_type s,
-                                                   const A &a) {
+hypervoxel::v::SAdd<typename A::value_type, A::size, A>
+operator+(typename A::value_type s, const A &a) {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SSub<typename A::value_type, A::size, A> operator-(const A &a,
-                                                   typename A::value_type s) {
+hypervoxel::v::SSub<typename A::value_type, A::size, A>
+operator-(const A &a, typename A::value_type s) {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SMult<typename A::value_type, A::size, A> operator*(const A &a,
-                                                    typename A::value_type s) {
+hypervoxel::v::SMult<typename A::value_type, A::size, A>
+operator*(const A &a, typename A::value_type s) {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SMult<typename A::value_type, A::size, A> operator*(typename A::value_type s,
-                                                    const A &a) {
+hypervoxel::v::SMult<typename A::value_type, A::size, A>
+operator*(typename A::value_type s, const A &a) {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SDiv<typename A::value_type, A::size, A> operator/(const A &a,
-                                                   typename A::value_type s) {
+hypervoxel::v::SDiv<typename A::value_type, A::size, A>
+operator/(const A &a, typename A::value_type s) {
   return {a, s};
 }
 
@@ -368,12 +371,12 @@ typename A::value_type max(const A &a) {
   return Max<typename A::value_type, A::size, A>(a).evaluate();
 }
 
-template <
-    class A, class B, class = typename rem_cvr<A>::thisisavvec,
-    class = typename rem_cvr<B>::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename rem_cvr<A>::value_type, typename rem_cvr<B>::value_type>::value &&
-        rem_cvr<A>::size == rem_cvr<B>::size>::type>
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
 typename A::value_type dot(const A &a, const B &b) {
   return sum(a * b);
 }
@@ -383,32 +386,45 @@ typename A::value_type norm(const A &a) {
   return sum(a * a);
 }
 
-template <
-    class A, class B, class = typename rem_cvr<A>::thisisavvec,
-    class = typename rem_cvr<B>::thisisavvec,
-    class = typename std::enable_if<
-        std::is_same<typename rem_cvr<A>::value_type, typename rem_cvr<B>::value_type>::value &&
-        rem_cvr<A>::size == rem_cvr<B>::size>::type>
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
 typename A::value_type dist(const A &a, const B &b) {
   return norm(a - b);
 }
 
 template <class T, std::size_t N> class Vec {
 
-  void assign(const T *other) {
-    for (std::size_t i = N; i--;) {
-      data[i] = other[i];
+  template <class U, std::size_t M>
+  struct VecAssign {
+
+    void operator()(T *v, const U& other) {
+      v[M - 1] = other[M - 1];
+      VecAssign<U, M - 1>{}(v, other);
     }
+  };
+
+  template <class U>
+  struct VecAssign<U, 1> {
+
+    void operator()(T *v, const U& other) {
+      v[0] = other[0];
+    }
+  };
+
+  void assign(const T *other) {
+    VecAssign<const T *, N>{}(data, other);
   }
 
-  template <
-      class U, class = typename rem_cvr<U>::thisisavvec,
-      class = typename std::enable_if<
-          std::is_same<T, typename rem_cvr<U>::value_type>::value && N == rem_cvr<U>::size>::type>
+  template <class U, class = typename rem_cvr<U>::thisisavvec,
+            class = typename std::enable_if<
+                std::is_same<T, typename rem_cvr<U>::value_type>::value &&
+                N == rem_cvr<U>::size>::type>
   void assign(const U &other) {
-    for (std::size_t i = N; i--;) {
-      data[i] = other[i];
-    }
+    VecAssign<U, N>{}(data, other);
   }
 
 public:
@@ -431,18 +447,18 @@ public:
 
   Vec() {}
 
-  template <
-      class U, class = typename rem_cvr<U>::thisisavvec,
-      class = typename std::enable_if<
-          std::is_same<T, typename rem_cvr<U>::value_type>::value && N == rem_cvr<U>::size>::type>
+  template <class U, class = typename rem_cvr<U>::thisisavvec,
+            class = typename std::enable_if<
+                std::is_same<T, typename rem_cvr<U>::value_type>::value &&
+                N == rem_cvr<U>::size>::type>
   Vec(const U &other) {
     assign<U>(other);
   }
 
-  template <
-      class U, class = typename rem_cvr<U>::thisisavvec,
-      class = typename std::enable_if<
-          std::is_same<T, typename rem_cvr<U>::value_type>::value && N == rem_cvr<U>::size>::type>
+  template <class U, class = typename rem_cvr<U>::thisisavvec,
+            class = typename std::enable_if<
+                std::is_same<T, typename rem_cvr<U>::value_type>::value &&
+                N == rem_cvr<U>::size>::type>
   Vec<T, N> &operator=(const U &other) {
     assign<U>(other);
     return *this;
@@ -453,31 +469,31 @@ public:
 
   void copyFrom(const T *ptr) { assign(ptr); }
 
-  template <
-      class U, class = typename rem_cvr<U>::thisisavvec,
-      class = typename std::enable_if<
-          std::is_same<T, typename rem_cvr<U>::value_type>::value && N == rem_cvr<U>::size>::type>
+  template <class U, class = typename rem_cvr<U>::thisisavvec,
+            class = typename std::enable_if<
+                std::is_same<T, typename rem_cvr<U>::value_type>::value &&
+                N == rem_cvr<U>::size>::type>
   Vec<T, N> &operator+=(const U &other) {
     return operator=(*this + other);
   }
-  template <
-      class U, class = typename rem_cvr<U>::thisisavvec,
-      class = typename std::enable_if<
-          std::is_same<T, typename rem_cvr<U>::value_type>::value && N == rem_cvr<U>::size>::type>
+  template <class U, class = typename rem_cvr<U>::thisisavvec,
+            class = typename std::enable_if<
+                std::is_same<T, typename rem_cvr<U>::value_type>::value &&
+                N == rem_cvr<U>::size>::type>
   Vec<T, N> &operator-=(const U &other) {
     return operator=(*this - other);
   }
-  template <
-      class U, class = typename rem_cvr<U>::thisisavvec,
-      class = typename std::enable_if<
-          std::is_same<T, typename rem_cvr<U>::value_type>::value && N == rem_cvr<U>::size>::type>
+  template <class U, class = typename rem_cvr<U>::thisisavvec,
+            class = typename std::enable_if<
+                std::is_same<T, typename rem_cvr<U>::value_type>::value &&
+                N == rem_cvr<U>::size>::type>
   Vec<T, N> &operator*=(const U &other) {
     return operator=(*this *other);
   }
-  template <
-      class U, class = typename rem_cvr<U>::thisisavvec,
-      class = typename std::enable_if<
-          std::is_same<T, typename rem_cvr<U>::value_type>::value && N == rem_cvr<U>::size>::type>
+  template <class U, class = typename rem_cvr<U>::thisisavvec,
+            class = typename std::enable_if<
+                std::is_same<T, typename rem_cvr<U>::value_type>::value &&
+                N == rem_cvr<U>::size>::type>
   Vec<T, N> &operator/=(const U &other) {
     return operator=(*this / other);
   }
