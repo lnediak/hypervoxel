@@ -140,6 +140,18 @@ template <class T, std::size_t N, class A, class B>
 using ElementwiseMax = BinaryOp<T, N, MaxU, A, B>;
 template <class T, std::size_t N, class A> using Max = Combine<T, N, MaxU, A>;
 
+template <std::size_t N, class A, class B> struct IsEqual {
+  bool operator()(const A &a, const B &b) const noexcept {
+    return a[N - 1] == b[N - 1] && IsEqual<N - 1, A, B>{}(a, b);
+  }
+};
+
+template <class A, class B> struct IsEqual<1, A, B> {
+  bool operator()(const A &a, const B &b) const noexcept {
+    return a[0] == b[0];
+  }
+};
+
 } // namespace v
 
 } // namespace hypervoxel
@@ -199,12 +211,7 @@ template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
                            typename rem_cvr<B>::value_type>::value &&
               rem_cvr<A>::size == rem_cvr<B>::size>::type>
 bool operator==(const A &a, const B &b) {
-  for (std::size_t i = A::size; i--;) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
+  return hypervoxel::v::IsEqual<rem_cvr<A>::size, A, B>{}(a, b);
 }
 
 namespace hypervoxel {
@@ -398,26 +405,20 @@ typename A::value_type dist(const A &a, const B &b) {
 
 template <class T, std::size_t N> class Vec {
 
-  template <class U, std::size_t M>
-  struct VecAssign {
+  template <class U, std::size_t M> struct VecAssign {
 
-    void operator()(T *v, const U& other) {
+    void operator()(T *v, const U &other) {
       v[M - 1] = other[M - 1];
       VecAssign<U, M - 1>{}(v, other);
     }
   };
 
-  template <class U>
-  struct VecAssign<U, 1> {
+  template <class U> struct VecAssign<U, 1> {
 
-    void operator()(T *v, const U& other) {
-      v[0] = other[0];
-    }
+    void operator()(T *v, const U &other) { v[0] = other[0]; }
   };
 
-  void assign(const T *other) {
-    VecAssign<const T *, N>{}(data, other);
-  }
+  void assign(const T *other) { VecAssign<const T *, N>{}(data, other); }
 
   template <class U, class = typename rem_cvr<U>::thisisavvec,
             class = typename std::enable_if<
@@ -517,27 +518,45 @@ template <class T, T value, std::size_t N> struct ConstantVec {
 template <std::size_t N> using IVec = Vec<std::int32_t, N>;
 template <std::size_t N> using DVec = Vec<double, N>;
 
+// Source: https://en.wikipedia.org/wiki/MurmurHash
+
+inline std::uint32_t murmurstep(std::uint32_t h, std::uint32_t val) {
+  val *= 0xcc9e2d51;
+  val = (val << 15) | (val >> 17);
+  val *= 0x1b873593;
+  h ^= val;
+  h = (h << 13) | (h >> 19);
+  return h * 5 + 0xe6546b64;
+}
+
+inline std::uint32_t murmurfin(std::uint32_t h) {
+  h ^= h >> 16;
+  h *= 0x85ebca6b;
+  h ^= h >> 13;
+  h *= 0xc2b2ae35;
+  h ^= h >> 16;
+  return h;
+}
+
 template <std::size_t N> struct IVecHash {
 
-  std::size_t impl(const std::int32_t *argp) const noexcept {
-    std::size_t total = IVecHash<N - 1>().impl(argp);
-    return total * total * N * (N + 1) + 1;
+  std::uint32_t impl(const std::int32_t *argp) const noexcept {
+    return murmurstep(IVecHash<N - 1>().impl(argp), argp[N - 1]);
   }
 
   std::size_t operator()(const IVec<N> &arg) const noexcept {
-    // FIXME: WRITE ACTUAL PROVABLY GOOD HASH
-    return impl(&arg[0]);
+    return murmurfin(impl(&arg[0]) ^ N);
   }
 };
 
 template <> struct IVecHash<1> {
 
-  std::size_t impl(const std::int32_t *argp) const noexcept {
-    return argp[0] * argp[0] * 2 + 1;
+  std::uint32_t impl(const std::int32_t *argp) const noexcept {
+    return murmurstep(0 /* seed */, argp[0]);
   }
 
   std::size_t operator()(const IVec<1> &arg) const noexcept {
-    return impl(&arg[0]);
+    return murmurfin(impl(&arg[0]) ^ 1);
   }
 };
 

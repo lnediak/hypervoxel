@@ -7,32 +7,33 @@
 
 #include "faces_manager.hpp"
 #include "pool_linked_list.hpp"
-#include "terrain_generator.hpp"
 #include "vector.hpp"
 
 namespace hypervoxel {
 
-template <std::size_t N, template <std::size_t> G> class TerrainCache {
+template <std::size_t N, class TerGen> class TerrainCache {
 
-  struct CacheEntry;
-
-  typedef std::unordered_map<v::IVec<N>, CacheEntry, v::IVecHash<N>> umap;
-  typedef PoolLinkedList<umap::iterator> plist;
+  typedef typename TerGen::blockdata BData;
 
   struct CacheEntry {
-    std::uint32_t color = 0;
-    plist::Node *listEntry = nullptr;
-    CacheEntry(std::uint32_t color, plist::Node *listEntry)
-        : color(color), listEntry(listEntry) {}
+    BData blockdata;
+    /* plist::Node */ void *listEntry = nullptr;
+    CacheEntry(BData blockdata, void *listEntry)
+        : blockdata(blockdata), listEntry(listEntry) {}
   };
 
-  G<N> terGen;
+  typedef std::unordered_map<v::IVec<N>, CacheEntry, v::IVecHash<N>,
+                             v::EqualFunctor<v::IVec<N>, v::IVec<N>>>
+      umap;
+  typedef PoolLinkedList<typename umap::iterator> plist;
+
+  TerGen terGen;
   umap cache;
   plist cachelist;
   std::size_t maxSize;
 
   /// Adds val to cachelist by removing back if full
-  plist::Node *addToListSafe(umap::value_type val) {
+  typename plist::Node *addToListSafe(typename umap::iterator val) {
     if (cachelist.invSize()) {
       return cachelist.addToBeg(val);
     }
@@ -43,47 +44,49 @@ template <std::size_t N, template <std::size_t> G> class TerrainCache {
   }
 
 public:
-  TerrainCache(G<N> &&terGen, std::size_t maxSize)
-      : terGen(terGen), cache(maxSize * 2), cachelist(maxSize),
-        maxSize(maxSize) {}
+  TerrainCache(const TerGen &terGen, std::size_t maxSize)
+      : terGen(terGen), cache(static_cast<std::size_t>(maxSize * 1.23)),
+        cachelist(maxSize), maxSize(maxSize) {}
 
-  void replaceCacheEntry(const v::IVec<N> &coord, std::uint32_t color) {
+  void replaceCacheEntry(const v::IVec<N> &coord, BData blockdata) {
     auto iter = cache.emplace(coord, {}).first;
-    iter->second.color = color;
+    iter->second.blockdata = blockdata;
     if (iter->second.listEntry) {
-      cachelist.remove(iter->second.listEntry);
+      cachelist.remove(
+          static_cast<typename plist::Node *>(iter->second.listEntry));
       iter->second.listEntry = cachelist.addToBeg(iter);
       return;
     }
     iter->second.listEntry = addToListSafe(iter);
   }
 
-  void insertCacheEntry(const v::IVec<N> &coord, std::uint32_t color) {
-    auto iter = cache.emplace(coord, {color, nullptr}).first;
+  void insertCacheEntry(const v::IVec<N> &coord, BData blockdata) {
+    auto iter = cache.emplace(coord, CacheEntry{blockdata, nullptr}).first;
     if (iter->second.listEntry) {
-      cachelist.remove(iter->second.listEntry);
+      cachelist.remove(
+          static_cast<typename plist::Node *>(iter->second.listEntry));
       iter->second.listEntry = cachelist.addToBeg(iter);
       return;
     }
     iter->second.listEntry = addToListSafe(iter);
   }
 
-  std::uint32_t operator()(const v::IVec<N> &coord) const {
+  BData operator()(const v::IVec<N> &coord) {
     auto iter = cache.find(coord);
     if (iter == cache.end()) {
-      std::uint32_t toreturn = terGen(coord);
+      BData toreturn = terGen(coord);
       insertCacheEntry(coord, toreturn);
       return toreturn;
     }
-    return iter->second.color;
+    return iter->second.blockdata;
   }
 
-  std::uint32_t *peek(const v::IVec<N> &coord) const {
+  BData *peek(const v::IVec<N> &coord) const {
     auto iter = cache.find(coord);
     if (iter == cache.end()) {
       return nullptr;
     }
-    return &iter->second.color;
+    return &iter->second.blockdata;
   }
 };
 

@@ -7,6 +7,7 @@
 
 #include "faces_manager.hpp"
 #include "line_follower.hpp"
+#include "terrain_cache.hpp"
 #include "terrain_slicer.hpp"
 
 namespace hypervoxel {
@@ -18,16 +19,17 @@ template <std::size_t N, class TerGen> class TerrainRenderer {
   std::size_t numThreads;
   std::unique_ptr<double[]> dists;
   std::unique_ptr<FacesManager<N>[]> facesManagers;
-  std::unique_ptr<typename LineFollower<N, TerGen>::Controller[]> controllers;
+  std::unique_ptr<typename LineFollower<N, TerrainCache<N, TerGen>>::Controller[]> controllers;
   std::unique_ptr<std::thread[]> threads;
 
   SliceDirs<N> sd;
 
 public:
   /// pdists decreasing
-  TerrainRenderer(TerGen &&terGen, std::size_t numThreads, double *pdists,
+  TerrainRenderer(TerGen &&tterGen, std::size_t terCacheVol,
+                  std::size_t numThreads, double *pdists,
                   const SliceDirs<N> &sd)
-      : terGen(terGen),
+      : terGen(tterGen),
         lines(new Line<N>[((N * (N - 1)) / 2) *
                           static_cast<std::size_t>(
                               (pdists[0] + 5) * (pdists[0] + 5) *
@@ -37,7 +39,7 @@ public:
         numThreads(numThreads), dists(new double[numThreads]),
         facesManagers(new FacesManager<N>[numThreads]),
         controllers(new
-                    typename LineFollower<N, TerGen>::Controller[numThreads]()),
+                    typename LineFollower<N, TerrainCache<N, TerGen>>::Controller[numThreads]()),
         threads(new std::thread[numThreads]), sd(sd) {
     std::copy(pdists, pdists + numThreads, dists.get());
     double currDist = 0;
@@ -50,10 +52,9 @@ public:
       facesManagers[i].~FacesManager();
       new (&facesManagers[i]) FacesManager<N>(
           static_cast<std::size_t>(newVolume - currVolume) * N / 2, sd.cam);
-      threads[i] = std::thread(
-          LineFollower<N, TerGen>(currDist, newDist,
-                                  /*TODO: TerrainCache here*/ TerGen{terGen},
-                                  facesManagers[i], controllers[i]));
+      threads[i] = std::thread(LineFollower<N, TerrainCache<N, TerGen>>(
+          currDist, newDist, TerrainCache<N, TerGen>{terGen, terCacheVol},
+          facesManagers[i], controllers[i]));
       currDist = newDist;
       currVolume = newVolume;
     }

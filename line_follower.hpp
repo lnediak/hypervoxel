@@ -121,10 +121,10 @@ private:
   }
 
 public:
-  LineFollower(double dist1, double dist2, TerGen &&terGen, FacesManager<N> &out,
+  LineFollower(double dist1, double dist2, TerGen &&terGenr, FacesManager<N> &out,
                Controller &controller)
       : dist1(dist1), dist2(dist2), dist1s(dist1 * dist1),
-        dist2s(dist2 * dist2), terGen(terGen), out(out),
+        dist2s(dist2 * dist2), terGen(std::move(terGenr)), out(out),
         controller(controller) {}
 
   LineFollower(const LineFollower &) = delete;
