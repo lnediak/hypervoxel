@@ -1,11 +1,13 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <random>
 
 #define GLAD_GL_IMPLEMENTATION
 #include "gl_program.hpp"
 
 #include "terrain_cache.hpp"
+#include "terrain_generator_perlin.hpp"
 #include "terrain_generator_tester.hpp"
 #include "terrain_renderer.hpp"
 
@@ -14,6 +16,35 @@ namespace {
 void errCallback(int, const char *err) { std::cerr << err << std::endl; }
 
 } // namespace
+
+/// numGradVecs needs to be a power of 2
+std::unique_ptr<double[]> getGradVecs(std::size_t numGradVecs,
+                                      std::size_t numDims, unsigned seed) {
+  std::unique_ptr<double[]> gradVecs(new double[numGradVecs * numDims]);
+  std::mt19937 mtrand(seed);
+  double pi2 = 2 * 3.141592653589792653589793238462643383;
+  // assuming numGradVecs is even (which it is)
+  for (std::size_t i = 0; i < numGradVecs * numDims; i += 2) {
+    double u1 = (1 - mtrand() / 4294967296.0);
+    double u2 = (1 - mtrand() / 4294967296.0);
+    double r = std::sqrt(-2 * std::log(u1));
+    gradVecs[i] = r * std::cos(pi2 * u2);
+    gradVecs[i + 1] = r * std::sin(pi2 * u2);
+  }
+  for (std::size_t i = 0; i < numGradVecs; i++) {
+    double norm = 0;
+    for (std::size_t j = 0; j < numDims; j++) {
+      norm += gradVecs[numDims * i + j] * gradVecs[numDims * i + j];
+    }
+    // the likelihood of norm being less than 1e-12 in 3 dimensions
+    // (chi-squared random variable) is insanely small
+    norm = std::sqrt(norm);
+    for (std::size_t j = 0; j < numDims; j++) {
+      gradVecs[numDims * i + j] /= norm;
+    }
+  }
+  return gradVecs;
+}
 
 int main() {
   glfwSetErrorCallback(&errCallback);
@@ -43,7 +74,7 @@ int main() {
   // double pdists[] = {25, 23.91, 22.714, 21.375, 19.843, 18.028,
   // 15.749, 12.5}; double pdists[] = {50, 47.82, 45.428, 42.75, 39.686,
   // 36.056, 31.498, 25}; double pdists[] = {50, 45.428, 39.686, 31.498};
-  double pdists[] = {20};
+  double pdists[] = {12};
   double sq12 = std::sqrt(.5);
   /*
   hypervoxel::SliceDirs<5> sd = {{0.1, 0.1, 0.1, 0.1, 0.1},
@@ -61,9 +92,14 @@ int main() {
                                  1};
   // hypervoxel::SliceDirs<3> sd = {{0.1, 0.1, -3.1}, {0, 0, 1}, {1, 0, 0}, {0,
   // 1, 0}, 1, 1};
-  hypervoxel::TerrainRenderer<4, hypervoxel::TerrainGeneratorTester<4>>
-      renderer(hypervoxel::TerrainGeneratorTester<4>{1001, 513}, 1000000, 1,
-               pdists, sd);
+  std::size_t numGradVecs = 4096;
+  unsigned seed = 2;
+  std::unique_ptr<double[]> gradVecs = getGradVecs(numGradVecs, 4, seed);
+  hypervoxel::TerrainRenderer<4, hypervoxel::TerrainGeneratorPerlin<4>>
+      renderer(
+          hypervoxel::TerrainGeneratorPerlin<4>{
+              {{32, 32, 32, 32}, gradVecs.get(), numGradVecs - 1, 3, 0.5}},
+          1000000, 1, pdists, sd);
   const std::size_t lenTriangles = 21 * 1048576;
   std::unique_ptr<float[]> triangles(new float[lenTriangles]);
   float *triangles_end = triangles.get() + lenTriangles;
@@ -96,3 +132,4 @@ int main() {
     }
   }
 }
+

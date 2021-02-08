@@ -11,14 +11,6 @@ namespace hypervoxel {
 template <std::size_t N> struct Line {
   v::DVec<N> a, b;
   v::DVec<3> a3, b3;
-  /// all defs here with a meaning a - cam, b meaning b - cam
-  double arr = 0;    /// a dot a
-  double brr = 0;    /// b dot b
-  double dfdf = 0;   /// (b - a) dot (b - a)
-  double adf = 0;    /// a dot (b - a)
-  double bdf = 0;    /// b dot (b - a)
-  double pdiscr = 0; /// adf * adf - dfdf * arr = bdf * bdf - dfdf * brr
-                     /// = (a dot b)^2 - (a dot a)*(b dot b)
   std::size_t dim1 = 0, dim2 = 0;
 };
 

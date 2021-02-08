@@ -48,47 +48,6 @@ private:
 
   // helpers
 
-  template <std::size_t M, class A, class = typename A::thisisavvec>
-  struct DVecFrom {
-
-    typedef void thisisavvec;
-    typedef double value_type;
-    static const std::size_t size = M;
-
-    const A &a;
-
-    value_type operator[](std::size_t i) const { return a[i]; }
-  };
-
-  template <class A> DVecFrom<A::size, A> toDVec(const A &a) { return {a}; }
-
-  template <std::size_t M> struct DVecFloor {
-
-    typedef void thisisavvec;
-    typedef std::int32_t value_type;
-    static const std::size_t size = M;
-
-    const v::DVec<M> &a;
-
-    value_type operator[](std::size_t i) const {
-      double val = a[i];
-      value_type toreturn = val;
-      toreturn -= (toreturn > val);
-      return toreturn;
-    }
-  };
-  template <std::size_t M> struct DVecAbs {
-
-    typedef void thisisavvec;
-    typedef double value_type;
-    static const std::size_t size = M;
-
-    const v::DVec<M> &a;
-
-    value_type operator[](std::size_t i) const {
-      return a[i] >= 0 ? a[i] : -a[i];
-    }
-  };
   template <std::size_t M, class T = v::DVec<M>,
             class = typename T::thisisavvec,
             class = typename std::enable_if<
@@ -106,19 +65,6 @@ private:
       return vec[i] >= 0 ? 1 + 1e-14 : -1e-14;
     }
   };
-
-  std::size_t minInd(const v::DVec<N> &a, double *out) {
-    double val = std::numeric_limits<double>::infinity();
-    std::size_t ind = -1;
-    for (std::size_t i = N; ind--;) {
-      if (a[i] < val) {
-        val = a[i];
-        ind = i;
-      }
-    }
-    *out = val;
-    return ind;
-  }
 
 public:
   LineFollower(double dist1, double dist2, TerGen &&terGenr, FacesManager<N> &out,
@@ -174,14 +120,14 @@ public:
           b3 -= df3 * offset;
         }
 
-        v::IVec<N> coord = DVecFloor<N>{a};
+        v::IVec<N> coord = v::DVecFloor<N>{a};
         v::DVec<N> invdf = 1. / df;
         v::DVec<N> sigdf1 = DVecSign1<N>{invdf};
 
         if (v::min(invdf) >= 1e8) {
           continue;
         }
-        double dist = v::min((toDVec(coord) - a + sigdf1) * invdf);
+        double dist = v::min((v::toDVec(coord) - a + sigdf1) * invdf);
         v::DVec<N> pos = a + df * dist;
         v::DVec<3> ppos3 = a3 + df3 * dist;
         while (true) {
@@ -198,7 +144,7 @@ public:
             ppos3 = tmp;
           }
           pos = a + df * dist;
-          coord = DVecFloor<N>{pos};
+          coord = v::DVecFloor<N>{pos};
         }
       }
       controller.queued_op = false;

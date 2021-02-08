@@ -189,7 +189,7 @@ public:
       for (std::size_t i = fe.edgeCount; i-- > 1;) {
         v::DVec<3> v1 = fe.edges[i][0];
         v::DVec<3> v2 = fe.edges[i][1];
-        if (v::dist(v0, v1) < 1e-8 || v::dist(v0, v2) < 1e-8) {
+        if (v::dist2(v0, v1) < 1e-8 || v::dist2(v0, v2) < 1e-8) {
           continue;
         }
         *out++ = v0[0];

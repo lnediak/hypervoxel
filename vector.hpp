@@ -4,12 +4,17 @@
 #include <cstdint>
 #include <type_traits>
 
+template <class T>
+using rem_cvr =
+    typename std::remove_cv<typename std::remove_reference<T>::type>::type;
+
 namespace hypervoxel {
 
 namespace v {
 
-template <class T, std::size_t N, template <class> class U, class A, class B>
-struct BinaryOp {
+// ------------------------BASIC OPERATIONS-------------
+
+template <class T, std::size_t N, class U, class A, class B> struct BinaryOp {
 
   const A &a;
   const B &b;
@@ -23,7 +28,7 @@ struct BinaryOp {
 
   const smaller gsmaller() const { return smaller(a, b); }
 
-  T operator[](std::size_t i) const { return U<T>::apply(a[i], b[i]); }
+  T operator[](std::size_t i) const { return U::apply(a[i], b[i]); }
 
   void evaluateInto(T *data) const {
     gsmaller().evaluateInto(data);
@@ -31,16 +36,14 @@ struct BinaryOp {
   }
 };
 
-template <class T, template <class> class U, class A, class B>
-struct BinaryOp<T, 0, U, A, B> {
+template <class T, class U, class A, class B> struct BinaryOp<T, 0, U, A, B> {
 
   BinaryOp(const A &, const B &) {}
 
   void evaluateInto(T *) const {}
 };
 
-template <class T, std::size_t N, template <class> class U, class A>
-struct ScalarOp {
+template <class T, std::size_t N, class U, class A> struct ScalarOp {
 
   const A &a;
   T s;
@@ -54,7 +57,7 @@ struct ScalarOp {
 
   const smaller gsmaller() const { return smaller(a, s); }
 
-  T operator[](std::size_t i) const { return U<T>::apply(a[i], s); }
+  T operator[](std::size_t i) const { return U::apply(a[i], s); }
 
   void evaluateInto(T *data) const {
     gsmaller().evaluateInto(data);
@@ -62,16 +65,43 @@ struct ScalarOp {
   }
 };
 
-template <class T, template <class> class U, class A>
-struct ScalarOp<T, 0, U, A> {
+template <class T, class U, class A> struct ScalarOp<T, 0, U, A> {
 
   ScalarOp(const A &, T) {}
 
   void evaluateInto(T *) const {}
 };
 
-template <class T, std::size_t N, template <class> class U, class A>
-struct Combine {
+template <class T, std::size_t N, class U, class A> struct ReverseScalarOp {
+
+  const A &a;
+  T s;
+
+  typedef ReverseScalarOp<T, N - 1, U, A> smaller;
+  typedef void thisisavvec;
+  typedef T value_type;
+  static const std::size_t size = N;
+
+  ReverseScalarOp(const A &a, T s) : a(a), s(s) {}
+
+  const smaller gsmaller() const { return smaller(a, s); }
+
+  T operator[](std::size_t i) const { return U::apply(s, a[i]); }
+
+  void evaluateInto(T *data) const {
+    gsmaller().evaluateInto(data);
+    data[N - 1] = operator[](N - 1);
+  }
+};
+
+template <class T, class U, class A> struct ReverseScalarOp<T, 0, U, A> {
+
+  ReverseScalarOp(const A &, T) {}
+
+  void evaluateInto(T *) const {}
+};
+
+template <class T, std::size_t N, class U, class A> struct Combine {
 
   const A &a;
 
@@ -81,11 +111,10 @@ struct Combine {
 
   const smaller gsmaller() const { return smaller(a); }
 
-  T evaluate() const { return U<T>::apply(gsmaller().evaluate(), a[N - 1]); }
+  T evaluate() const { return U::apply(gsmaller().evaluate(), a[N - 1]); }
 };
 
-template <class T, template <class> class U, class A>
-struct Combine<T, 1, U, A> {
+template <class T, class U, class A> struct Combine<T, 1, U, A> {
 
   const A &a;
 
@@ -93,52 +122,6 @@ struct Combine<T, 1, U, A> {
 
   T evaluate() const { return a[0]; }
 };
-
-template <class T> struct AddU {
-  static T apply(T a, T b) { return a + b; }
-};
-template <class T, std::size_t N, class A, class B>
-using Add = BinaryOp<T, N, AddU, A, B>;
-template <class T, std::size_t N, class A> using SAdd = ScalarOp<T, N, AddU, A>;
-template <class T, std::size_t N, class A> using Sum = Combine<T, N, AddU, A>;
-
-template <class T> struct SubU {
-  static T apply(T a, T b) { return a - b; }
-};
-template <class T, std::size_t N, class A, class B>
-using Sub = BinaryOp<T, N, SubU, A, B>;
-template <class T, std::size_t N, class A> using SSub = ScalarOp<T, N, SubU, A>;
-
-template <class T> struct MultU {
-  static T apply(T a, T b) { return a * b; }
-};
-template <class T, std::size_t N, class A, class B>
-using Mult = BinaryOp<T, N, MultU, A, B>;
-template <class T, std::size_t N, class A>
-using SMult = ScalarOp<T, N, MultU, A>;
-template <class T, std::size_t N, class A>
-using Product = Combine<T, N, MultU, A>;
-
-template <class T> struct DivU {
-  static T apply(T a, T b) { return a / b; }
-};
-template <class T, std::size_t N, class A, class B>
-using Div = BinaryOp<T, N, DivU, A, B>;
-template <class T, std::size_t N, class A> using SDiv = ScalarOp<T, N, DivU, A>;
-
-template <class T> struct MinU {
-  static T apply(T a, T b) { return a > b ? b : a; }
-};
-template <class T, std::size_t N, class A, class B>
-using ElementwiseMin = BinaryOp<T, N, MinU, A, B>;
-template <class T, std::size_t N, class A> using Min = Combine<T, N, MinU, A>;
-
-template <class T> struct MaxU {
-  static T apply(T a, T b) { return a > b ? a : b; }
-};
-template <class T, std::size_t N, class A, class B>
-using ElementwiseMax = BinaryOp<T, N, MaxU, A, B>;
-template <class T, std::size_t N, class A> using Max = Combine<T, N, MaxU, A>;
 
 template <std::size_t N, class A, class B> struct IsEqual {
   bool operator()(const A &a, const B &b) const noexcept {
@@ -152,72 +135,6 @@ template <class A, class B> struct IsEqual<1, A, B> {
   }
 };
 
-} // namespace v
-
-} // namespace hypervoxel
-
-template <class T>
-using rem_cvr =
-    typename std::remove_cv<typename std::remove_reference<T>::type>::type;
-
-template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
-          class = typename rem_cvr<B>::thisisavvec,
-          class = typename std::enable_if<
-              std::is_same<typename rem_cvr<A>::value_type,
-                           typename rem_cvr<B>::value_type>::value &&
-              rem_cvr<A>::size == rem_cvr<B>::size>::type>
-hypervoxel::v::Add<typename A::value_type, A::size, A, B>
-operator+(const A &a, const B &b) {
-  return {a, b};
-}
-
-template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
-          class = typename rem_cvr<B>::thisisavvec,
-          class = typename std::enable_if<
-              std::is_same<typename rem_cvr<A>::value_type,
-                           typename rem_cvr<B>::value_type>::value &&
-              rem_cvr<A>::size == rem_cvr<B>::size>::type>
-hypervoxel::v::Sub<typename A::value_type, A::size, A, B>
-operator-(const A &a, const B &b) {
-  return {a, b};
-}
-
-template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
-          class = typename rem_cvr<B>::thisisavvec,
-          class = typename std::enable_if<
-              std::is_same<typename rem_cvr<A>::value_type,
-                           typename rem_cvr<B>::value_type>::value &&
-              rem_cvr<A>::size == rem_cvr<B>::size>::type>
-hypervoxel::v::Mult<typename A::value_type, A::size, A, B>
-operator*(const A &a, const B &b) {
-  return {a, b};
-}
-
-template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
-          class = typename rem_cvr<B>::thisisavvec,
-          class = typename std::enable_if<
-              std::is_same<typename rem_cvr<A>::value_type,
-                           typename rem_cvr<B>::value_type>::value &&
-              rem_cvr<A>::size == rem_cvr<B>::size>::type>
-hypervoxel::v::Div<typename A::value_type, A::size, A, B>
-operator/(const A &a, const B &b) {
-  return {a, b};
-}
-
-template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
-          class = typename rem_cvr<B>::thisisavvec,
-          class = typename std::enable_if<
-              std::is_same<typename rem_cvr<A>::value_type,
-                           typename rem_cvr<B>::value_type>::value &&
-              rem_cvr<A>::size == rem_cvr<B>::size>::type>
-bool operator==(const A &a, const B &b) {
-  return hypervoxel::v::IsEqual<rem_cvr<A>::size, A, B>{}(a, b);
-}
-
-namespace hypervoxel {
-
-namespace v {
-
 template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
           class = typename rem_cvr<B>::thisisavvec,
           class = typename std::enable_if<
@@ -225,30 +142,10 @@ template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
                            typename rem_cvr<B>::value_type>::value &&
               rem_cvr<A>::size == rem_cvr<B>::size>::type>
 struct EqualFunctor {
-  bool operator()(const A &a, const B &b) const noexcept { return a == b; }
+  bool operator()(const A &a, const B &b) const noexcept {
+    return hypervoxel::v::IsEqual<rem_cvr<A>::size, A, B>{}(a, b);
+  }
 };
-
-template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
-          class = typename rem_cvr<B>::thisisavvec,
-          class = typename std::enable_if<
-              std::is_same<typename rem_cvr<A>::value_type,
-                           typename rem_cvr<B>::value_type>::value &&
-              rem_cvr<A>::size == rem_cvr<B>::size>::type>
-ElementwiseMin<typename A::value_type, A::size, A, B>
-elementwiseMin(const A &a, const B &b) {
-  return {a, b};
-}
-
-template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
-          class = typename rem_cvr<B>::thisisavvec,
-          class = typename std::enable_if<
-              std::is_same<typename rem_cvr<A>::value_type,
-                           typename rem_cvr<B>::value_type>::value &&
-              rem_cvr<A>::size == rem_cvr<B>::size>::type>
-ElementwiseMax<typename A::value_type, A::size, A, B>
-elementwiseMax(const A &a, const B &b) {
-  return {a, b};
-}
 
 template <class T, std::size_t N, class A> struct UnaryNeg {
 
@@ -278,90 +175,65 @@ template <class T, class A> struct UnaryNeg<T, 0, A> {
   void evaluateInto(T *) {}
 };
 
-template <class T, std::size_t N, class A> struct ReverseScalarDiv {
+// ------------------------TYPEDEFS------------------
 
-  T s;
-  const A &a;
-
-  typedef ReverseScalarDiv<T, N - 1, A> smaller;
-  typedef void thisisavvec;
-  typedef T value_type;
-  static const std::size_t size = N;
-
-  ReverseScalarDiv(T s, const A &a) : s(s), a(a) {}
-
-  const smaller gsmaller() const { return smaller(s, a); }
-
-  T operator[](std::size_t i) const { return s / a[i]; }
-
-  void evaluateInto(T *data) const {
-    gsmaller().evaluateInto(data);
-    data[N - 1] = operator[](N - 1);
-  }
+template <class T> struct AddU {
+  static T apply(T a, T b) { return a + b; }
 };
+template <class T, std::size_t N, class A, class B>
+using Add = BinaryOp<T, N, AddU<T>, A, B>;
+template <class T, std::size_t N, class A>
+using SAdd = ScalarOp<T, N, AddU<T>, A>;
+template <class T, std::size_t N, class A>
+using Sum = Combine<T, N, AddU<T>, A>;
 
-template <class T, class A> struct ReverseScalarDiv<T, 0, A> {
-
-  ReverseScalarDiv(T, const A &) {}
-
-  void evaluateInto(T *) const {}
+template <class T> struct SubU {
+  static T apply(T a, T b) { return a - b; }
 };
+template <class T, std::size_t N, class A, class B>
+using Sub = BinaryOp<T, N, SubU<T>, A, B>;
+template <class T, std::size_t N, class A>
+using SSub = ScalarOp<T, N, SubU<T>, A>;
+template <class T, std::size_t N, class A>
+using ReverseSSub = ReverseScalarOp<T, N, SubU<T>, A>;
 
-} // namespace v
+template <class T> struct MultU {
+  static T apply(T a, T b) { return a * b; }
+};
+template <class T, std::size_t N, class A, class B>
+using Mult = BinaryOp<T, N, MultU<T>, A, B>;
+template <class T, std::size_t N, class A>
+using SMult = ScalarOp<T, N, MultU<T>, A>;
+template <class T, std::size_t N, class A>
+using Product = Combine<T, N, MultU<T>, A>;
 
-} // namespace hypervoxel
+template <class T> struct DivU {
+  static T apply(T a, T b) { return a / b; }
+};
+template <class T, std::size_t N, class A, class B>
+using Div = BinaryOp<T, N, DivU<T>, A, B>;
+template <class T, std::size_t N, class A>
+using SDiv = ScalarOp<T, N, DivU<T>, A>;
+template <class T, std::size_t N, class A>
+using ReverseSDiv = ReverseScalarOp<T, N, DivU<T>, A>;
 
-template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::UnaryNeg<typename A::value_type, A::size, A>
-operator-(const A &a) {
-  return {a};
-}
+template <class T> struct MinU {
+  static T apply(T a, T b) { return a > b ? b : a; }
+};
+template <class T, std::size_t N, class A, class B>
+using ElementwiseMin = BinaryOp<T, N, MinU<T>, A, B>;
+template <class T, std::size_t N, class A>
+using Min = Combine<T, N, MinU<T>, A>;
 
-template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SAdd<typename A::value_type, A::size, A>
-operator+(const A &a, typename A::value_type s) {
-  return {a, s};
-}
+template <class T> struct MaxU {
+  static T apply(T a, T b) { return a > b ? a : b; }
+};
+template <class T, std::size_t N, class A, class B>
+using ElementwiseMax = BinaryOp<T, N, MaxU<T>, A, B>;
+template <class T, std::size_t N, class A>
+using Max = Combine<T, N, MaxU<T>, A>;
 
-template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SAdd<typename A::value_type, A::size, A>
-operator+(typename A::value_type s, const A &a) {
-  return {a, s};
-}
-
-template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SSub<typename A::value_type, A::size, A>
-operator-(const A &a, typename A::value_type s) {
-  return {a, s};
-}
-
-template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SMult<typename A::value_type, A::size, A>
-operator*(const A &a, typename A::value_type s) {
-  return {a, s};
-}
-
-template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SMult<typename A::value_type, A::size, A>
-operator*(typename A::value_type s, const A &a) {
-  return {a, s};
-}
-
-template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::SDiv<typename A::value_type, A::size, A>
-operator/(const A &a, typename A::value_type s) {
-  return {a, s};
-}
-
-template <class A, class = typename rem_cvr<A>::thisisavvec>
-hypervoxel::v::ReverseScalarDiv<typename A::value_type, A::size, A>
-operator/(typename A::value_type s, const A &a) {
-  return {s, a};
-}
-
-namespace hypervoxel {
-
-namespace v {
+// -----------------------FUNCTIONS----------------------
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
 typename A::value_type sum(const A &a) {
@@ -384,12 +256,34 @@ template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
               std::is_same<typename rem_cvr<A>::value_type,
                            typename rem_cvr<B>::value_type>::value &&
               rem_cvr<A>::size == rem_cvr<B>::size>::type>
+ElementwiseMin<typename A::value_type, A::size, A, B>
+elementwiseMin(const A &a, const B &b) {
+  return {a, b};
+}
+
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
+ElementwiseMax<typename A::value_type, A::size, A, B>
+elementwiseMax(const A &a, const B &b) {
+  return {a, b};
+}
+
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
 typename A::value_type dot(const A &a, const B &b) {
   return sum(a * b);
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-typename A::value_type norm(const A &a) {
+typename A::value_type norm2(const A &a) {
   return sum(a * a);
 }
 
@@ -399,9 +293,11 @@ template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
               std::is_same<typename rem_cvr<A>::value_type,
                            typename rem_cvr<B>::value_type>::value &&
               rem_cvr<A>::size == rem_cvr<B>::size>::type>
-typename A::value_type dist(const A &a, const B &b) {
-  return norm(a - b);
+typename A::value_type dist2(const A &a, const B &b) {
+  return norm2(a - b);
 }
+
+// ----------------------VEC DEFINITION-----------------
 
 template <class T, std::size_t N> class Vec {
 
@@ -436,6 +332,8 @@ public:
 
   T data[N];
 
+  Vec() {}
+
   Vec(const std::initializer_list<T> &inil) {
     if (inil.size() != N) {
       return;
@@ -446,14 +344,16 @@ public:
     }
   }
 
-  Vec() {}
-
   template <class U, class = typename rem_cvr<U>::thisisavvec,
             class = typename std::enable_if<
                 std::is_same<T, typename rem_cvr<U>::value_type>::value &&
                 N == rem_cvr<U>::size>::type>
   Vec(const U &other) {
     assign<U>(other);
+  }
+
+  explicit Vec(const T *other) {
+    assign(other);
   }
 
   template <class U, class = typename rem_cvr<U>::thisisavvec,
@@ -515,54 +415,208 @@ template <class T, T value, std::size_t N> struct ConstantVec {
   constexpr T operator[](std::size_t) const { return value; }
 };
 
+// -----------------------VEC HELPERS-------------------
+
 template <std::size_t N> using IVec = Vec<std::int32_t, N>;
+template <std::size_t N> using FVec = Vec<float, N>;
 template <std::size_t N> using DVec = Vec<double, N>;
 
 // Source: https://en.wikipedia.org/wiki/MurmurHash
-
-inline std::uint32_t murmurstep(std::uint32_t h, std::uint32_t val) {
-  val *= 0xcc9e2d51;
-  val = (val << 15) | (val >> 17);
-  val *= 0x1b873593;
-  h ^= val;
-  h = (h << 13) | (h >> 19);
-  return h * 5 + 0xe6546b64;
-}
-
-inline std::uint32_t murmurfin(std::uint32_t h) {
-  h ^= h >> 16;
-  h *= 0x85ebca6b;
-  h ^= h >> 13;
-  h *= 0xc2b2ae35;
-  h ^= h >> 16;
-  return h;
-}
+// I modified the ending of the algo so that it can
+// run faster.
 
 template <std::size_t N> struct IVecHash {
 
+protected:
+  std::uint32_t murmurscram(std::uint32_t val) const noexcept {
+    val *= 0xcc9e2d51;
+    val = (val << 15) | (val >> 17);
+    val *= 0x1b873593;
+    return val;
+  }
+
+  std::uint32_t murmurstep(std::uint32_t h, std::uint32_t val) const noexcept {
+    h ^= murmurscram(val);
+    h = (h << 13) | (h >> 19);
+    return h * 5 + 0xe6546b64;
+  }
+
+public:
   std::uint32_t impl(const std::int32_t *argp) const noexcept {
     return murmurstep(IVecHash<N - 1>().impl(argp), argp[N - 1]);
   }
 
   std::size_t operator()(const IVec<N> &arg) const noexcept {
-    return murmurfin(impl(&arg[0]) ^ N);
+    return IVecHash<N - 1>().impl(&arg[0]) ^ murmurscram(arg[N - 1]);
   }
 };
 
-template <> struct IVecHash<1> {
+template <> struct IVecHash<1> : protected IVecHash<2> {
 
   std::uint32_t impl(const std::int32_t *argp) const noexcept {
     return murmurstep(0 /* seed */, argp[0]);
   }
 
   std::size_t operator()(const IVec<1> &arg) const noexcept {
-    return murmurfin(impl(&arg[0]) ^ 1);
+    return murmurscram(arg[0]);
+  }
+};
+
+template <std::size_t M, class A, class = typename A::thisisavvec>
+struct DVecFrom {
+
+  typedef void thisisavvec;
+  typedef double value_type;
+  static const std::size_t size = M;
+
+  const A &a;
+
+  value_type operator[](std::size_t i) const { return a[i]; }
+};
+
+template <class A> DVecFrom<A::size, A> toDVec(const A &a) { return {a}; }
+
+template <std::size_t M> struct DVecFloor {
+
+  typedef void thisisavvec;
+  typedef std::int32_t value_type;
+  static const std::size_t size = M;
+
+  const DVec<M> &a;
+
+  value_type operator[](std::size_t i) const {
+    double val = a[i];
+    value_type toreturn = val;
+    toreturn -= (toreturn > val);
+    return toreturn;
+  }
+};
+template <std::size_t M> struct DVecAbs {
+
+  typedef void thisisavvec;
+  typedef double value_type;
+  static const std::size_t size = M;
+
+  const DVec<M> &a;
+
+  value_type operator[](std::size_t i) const {
+    return a[i] >= 0 ? a[i] : -a[i];
   }
 };
 
 } // namespace v
 
 } // namespace hypervoxel
+
+// -----------------------GENERIC OPERATORS-------------
+
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
+hypervoxel::v::Add<typename A::value_type, A::size, A, B>
+operator+(const A &a, const B &b) {
+  return {a, b};
+}
+
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
+hypervoxel::v::Sub<typename A::value_type, A::size, A, B>
+operator-(const A &a, const B &b) {
+  return {a, b};
+}
+
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
+hypervoxel::v::Mult<typename A::value_type, A::size, A, B>
+operator*(const A &a, const B &b) {
+  return {a, b};
+}
+
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
+hypervoxel::v::Div<typename A::value_type, A::size, A, B>
+operator/(const A &a, const B &b) {
+  return {a, b};
+}
+
+template <class A, class = typename rem_cvr<A>::thisisavvec>
+hypervoxel::v::UnaryNeg<typename A::value_type, A::size, A>
+operator-(const A &a) {
+  return {a};
+}
+
+template <class A, class = typename rem_cvr<A>::thisisavvec>
+hypervoxel::v::SAdd<typename A::value_type, A::size, A>
+operator+(const A &a, typename A::value_type s) {
+  return {a, s};
+}
+
+template <class A, class = typename rem_cvr<A>::thisisavvec>
+hypervoxel::v::SAdd<typename A::value_type, A::size, A>
+operator+(typename A::value_type s, const A &a) {
+  return {a, s};
+}
+
+template <class A, class = typename rem_cvr<A>::thisisavvec>
+hypervoxel::v::SSub<typename A::value_type, A::size, A>
+operator-(const A &a, typename A::value_type s) {
+  return {a, s};
+}
+
+template <class A, class = typename rem_cvr<A>::thisisavvec>
+hypervoxel::v::ReverseSSub<typename A::value_type, A::size, A>
+operator-(typename A::value_type s, const A &a) {
+  return {a, s};
+}
+
+template <class A, class = typename rem_cvr<A>::thisisavvec>
+hypervoxel::v::SMult<typename A::value_type, A::size, A>
+operator*(const A &a, typename A::value_type s) {
+  return {a, s};
+}
+
+template <class A, class = typename rem_cvr<A>::thisisavvec>
+hypervoxel::v::SMult<typename A::value_type, A::size, A>
+operator*(typename A::value_type s, const A &a) {
+  return {a, s};
+}
+
+template <class A, class = typename rem_cvr<A>::thisisavvec>
+hypervoxel::v::SDiv<typename A::value_type, A::size, A>
+operator/(const A &a, typename A::value_type s) {
+  return {a, s};
+}
+
+template <class A, class = typename rem_cvr<A>::thisisavvec>
+hypervoxel::v::ReverseSDiv<typename A::value_type, A::size, A>
+operator/(typename A::value_type s, const A &a) {
+  return {a, s};
+}
+
+template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
+          class = typename rem_cvr<B>::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<typename rem_cvr<A>::value_type,
+                           typename rem_cvr<B>::value_type>::value &&
+              rem_cvr<A>::size == rem_cvr<B>::size>::type>
+bool operator==(const A &a, const B &b) {
+  return hypervoxel::v::EqualFunctor<A, B>{}(a, b);
+}
 
 #endif // HYPERVOXEL_VECTOR_HPP_
 
