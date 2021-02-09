@@ -1,3 +1,5 @@
 *.o
+callgrind.out.*
 basic_test
+chtbl_test
 
