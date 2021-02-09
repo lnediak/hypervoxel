@@ -6,7 +6,7 @@
 #include <mutex>
 
 #include "faces_manager.hpp"
-#include "terrain_slicer.hpp"
+#include "primitives.hpp"
 
 namespace hypervoxel {
 

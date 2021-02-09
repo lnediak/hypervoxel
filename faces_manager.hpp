@@ -6,8 +6,7 @@
 #include <utility>
 
 #include "pool_linked_list.hpp"
-#include "terrain_slicer.hpp"
-#include "vector.hpp"
+#include "primitives.hpp"
 
 namespace hypervoxel {
 

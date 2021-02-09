@@ -1,11 +1,8 @@
 #ifndef HYPERVOXEL_TERRAIN_CACHE_HPP_
 #define HYPERVOXEL_TERRAIN_CACHE_HPP_
 
-#include <cstdint>
-#include <thread>
 #include <unordered_map>
 
-#include "faces_manager.hpp"
 #include "pool_linked_list.hpp"
 #include "vector.hpp"
 

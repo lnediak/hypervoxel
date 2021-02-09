@@ -1,27 +1,11 @@
 #ifndef HYPERVOXEL_TERRAIN_SLICER_HPP_
 #define HYPERVOXEL_TERRAIN_SLICER_HPP_
 
-#include <algorithm>
 #include <cmath>
 
-#include "vector.hpp"
+#include "primitives.hpp"
 
 namespace hypervoxel {
-
-template <std::size_t N> struct Line {
-  v::DVec<N> a, b;
-  v::DVec<3> a3, b3;
-  std::size_t dim1 = 0, dim2 = 0;
-};
-
-template <std::size_t N> struct SliceDirs {
-  v::DVec<N> cam, right, up, forward;
-  double width2, height2;
-};
-
-struct Color {
-  float r, g, b, a;
-};
 
 template <std::size_t N>
 inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {

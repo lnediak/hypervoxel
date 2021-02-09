@@ -1,10 +1,9 @@
 #ifndef TERRAIN_GENERATOR_PERLIN_HPP_
 #define TERRAIN_GENERATOR_PERLIN_HPP_
 
-#include "vector.hpp"
 #include <type_traits>
 
-#include "terrain_slicer.hpp"
+#include "primitives.hpp"
 
 namespace hypervoxel {
 

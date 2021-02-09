@@ -6,7 +6,6 @@
 #define GLAD_GL_IMPLEMENTATION
 #include "gl_program.hpp"
 
-#include "terrain_cache.hpp"
 #include "terrain_generator_perlin.hpp"
 #include "terrain_generator_tester.hpp"
 #include "terrain_renderer.hpp"
