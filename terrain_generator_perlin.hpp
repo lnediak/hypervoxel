@@ -129,7 +129,7 @@ public:
   } options;
 
   blockdata operator()(const v::IVec<N> &coord) const {
-    return {get(coord) > 0.1};
+    return {get(coord) > 0.3};
   }
 
   double get(const v::IVec<N> &coord) const {
