@@ -33,8 +33,7 @@ struct ConcurrentHashMapNoResize {
       : size(1 << sizeBits), sizeMask(size - 1),
         table(new Entry[size]), hasher{}, eqer{} {}
 
-  /// please run std::atomic_thread_fence(std::memory_order_acquire) after this
-  /// in each thread
+  /// run acquireClear after running this
   void clearNotThreadsafe() {
     for (std::size_t i = 0; i < size; i++) {
       table[i].hash.store(0, std::memory_order_relaxed);
@@ -42,41 +41,37 @@ struct ConcurrentHashMapNoResize {
     std::atomic_thread_fence(std::memory_order_release);
   }
 
-  Entry *find(const K &k) const {
-    Entry *tptr = table.get();
+  /// run this in each thread after running clearNotThreadsafe
+  void acquireClear() { std::atomic_thread_fence(std::memory_order_acquire); }
+
+  template <class F>
+  decltype(std::declval<F>()(std::declval<V &>())) findAndRun(const K &k,
+                                                              F &&functor) {
     std::size_t kh = hasher(k);
     std::size_t khm = kh | hashmask;
+    Entry *tptr = table.get();
     for (std::size_t i = kh & sizeMask;; i = (i + 1) & sizeMask) {
       Entry *tmp = tptr + i;
       std::size_t hash = tmp->hash.load(std::memory_order_relaxed);
       if (hash == 0) {
-        return tmp;
+        std::unique_lock<Mutex> ll(tmp->lock);
+        hash = tmp->hash.load(std::memory_order_relaxed);
+        if ((hash != 0) && (hash != khm)) {
+          // Another thread has stolen this bucket for their own key
+          continue;
+        } else if (hash == 0) {
+          tmp->hash.store(khm, std::memory_order_relaxed);
+          tmp->value.first = k;
+          ::new (&tmp->value.second) V{};
+        }
+        return functor(tmp->value.second);
       }
       if (hash == khm) {
         std::unique_lock<Mutex> ll(tmp->lock);
         if (eqer(k, tmp->value.first)) {
-          return tmp;
+          return functor(tmp->value.second);
         }
       }
-    }
-    return nullptr; /// should never happen, lol
-  }
-
-  /// Editing V thread-safely here is YOUR responsibility now
-  V &operator[](const K &k) {
-    std::size_t kh = hasher(k);
-    std::size_t khm = kh | hashmask;
-    while (true) {
-      Entry *ptr = find(k);
-      std::unique_lock<Mutex> ll(ptr->lock);
-      std::size_t hash = ptr->hash.load(std::memory_order_relaxed);
-      if ((hash != 0) && (hash != khm)) {
-        // Another thread has stolen this bucket for their own key
-        continue;
-      }
-      ptr->hash.store(khm, std::memory_order_relaxed);
-      ptr->value.first = k;
-      return ptr->value.second;
     }
   }
 };

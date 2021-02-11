@@ -46,22 +46,6 @@ template <std::size_t N> class FacesManager {
   std::size_t maxSize;
   v::DVec<N> cam;
 
-  template <std::size_t M, class A, class = typename A::thisisavvec>
-  struct DVecFrom {
-
-    typedef void thisisavvec;
-    typedef double value_type;
-    static const std::size_t size = M;
-
-    const A &a;
-
-    value_type operator[](std::size_t i) const { return a[i]; }
-  };
-
-  template <class A> DVecFrom<A::size, A> toDVec(const A &a) const {
-    return {a};
-  }
-
   template <class GetColor>
   void storeEdge(const v::IVec<N> &coord, std::size_t dim,
                  const GetColor &getColor, const v::DVec<3> &a,
