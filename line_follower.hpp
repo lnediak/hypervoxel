@@ -15,7 +15,6 @@ template <std::size_t N, class TerGen> class LineFollower {
 public:
   struct Operation {
     const Line<N> *nlines, *nlines_end;
-    const double *ncam;
     bool term;
   };
 
@@ -26,7 +25,7 @@ public:
     bool queued_op;
     Operation op;
 
-    Controller() : queued_op(false), op{nullptr, nullptr, nullptr, false} {}
+    Controller() : queued_op(false), op{nullptr, nullptr, false} {}
 
     void queue_op(Operation op) {
       std::unique_lock<std::mutex> lock(this_mutex);
@@ -45,6 +44,8 @@ private:
   FacesManager<N> &out;
 
   Controller &controller;
+
+  std::size_t threadi;
 
   // helpers
 
@@ -67,11 +68,12 @@ private:
   };
 
 public:
-  LineFollower(double dist1, double dist2, TerGen &&terGenr, FacesManager<N> &out,
-               Controller &controller)
+  LineFollower(double dist1, double dist2, TerGen &&terGenr,
+               FacesManager<N> &out, Controller &controller,
+               std::size_t threadi)
       : dist1(dist1), dist2(dist2), dist1s(dist1 * dist1),
         dist2s(dist2 * dist2), terGen(std::move(terGenr)), out(out),
-        controller(controller) {}
+        controller(controller), threadi(threadi) {}
 
   LineFollower(const LineFollower &) = delete;
   LineFollower(LineFollower &&) = default;
@@ -89,8 +91,7 @@ public:
           }
           lines = controller.op.nlines;
           lines_end = controller.op.nlines_end;
-          out.clear();
-          out.setCam(controller.op.ncam);
+          out.acquireClear();
           return true;
         }
         return false;
@@ -135,12 +136,14 @@ public:
           dist += ndist + 1e-8;
           if (dist >= 1) {
             v::DVec<3> tmp = a3 + df3 * dist;
-            out.addEdge(coord, lines->dim1, lines->dim2, ppos3, tmp, terGen);
+            out.addEdge(coord, lines->dim1, lines->dim2, ppos3, tmp, terGen,
+                        threadi);
             break;
           }
           if (ndist >= 1e-8) {
             v::DVec<3> tmp = a3 + df3 * dist;
-            out.addEdge(coord, lines->dim1, lines->dim2, ppos3, tmp, terGen);
+            out.addEdge(coord, lines->dim1, lines->dim2, ppos3, tmp, terGen,
+                        threadi);
             ppos3 = tmp;
           }
           pos = a + df * dist;
@@ -148,6 +151,7 @@ public:
         }
       }
       controller.queued_op = false;
+      std::atomic_thread_fence(std::memory_order_release);
     }
   }
 };

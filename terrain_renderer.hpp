@@ -18,8 +18,11 @@ template <std::size_t N, class TerGen> class TerrainRenderer {
   std::unique_ptr<Line<N>[]> lines;
   std::size_t numThreads;
   std::unique_ptr<double[]> dists;
-  std::unique_ptr<FacesManager<N>[]> facesManagers;
-  std::unique_ptr<typename LineFollower<N, TerrainCache<N, TerGen>>::Controller[]> controllers;
+
+  FacesManager<N> facesManager;
+  std::unique_ptr<
+      typename LineFollower<N, TerrainCache<N, TerGen>>::Controller[]>
+      controllers;
   std::unique_ptr<std::thread[]> threads;
 
   SliceDirs<N> sd;
@@ -27,8 +30,8 @@ template <std::size_t N, class TerGen> class TerrainRenderer {
 public:
   /// pdists decreasing
   TerrainRenderer(TerGen &&tterGen, std::size_t terCacheVol,
-                  std::size_t numThreads, double *pdists,
-                  const SliceDirs<N> &sd)
+                  std::size_t facesManagerSize, std::size_t numThreads,
+                  double *pdists, const SliceDirs<N> &sd)
       : terGen(tterGen),
         lines(new Line<N>[((N * (N - 1)) / 2) *
                           static_cast<std::size_t>(
@@ -37,45 +40,37 @@ public:
                                    sd.height2 * sd.height2) +
                               3 * pdists[0])]),
         numThreads(numThreads), dists(new double[numThreads]),
-        facesManagers(new FacesManager<N>[numThreads]),
-        controllers(new
-                    typename LineFollower<N, TerrainCache<N, TerGen>>::Controller[numThreads]()),
+        facesManager(facesManagerSize, facesManagerSize / numThreads, sd.cam),
+        controllers(new typename LineFollower<
+                    N, TerrainCache<N, TerGen>>::Controller[numThreads]()),
         threads(new std::thread[numThreads]), sd(sd) {
     std::copy(pdists, pdists + numThreads, dists.get());
     double currDist = 0;
-    double currVolume = 0;
-    double multi = (N * N + 5 * N + 6) * std::sqrt(3) / 2;
-    double baseAreaD = 4 * multi * sd.width2 * sd.height2 / 6;
+    double newDist;
     for (std::size_t i = numThreads; i--;) {
-      double newDist = pdists[i] + 5;
-      double newVolume = newDist * newDist * newDist * baseAreaD;
-      facesManagers[i].~FacesManager();
-      new (&facesManagers[i]) FacesManager<N>(
-          static_cast<std::size_t>(newVolume - currVolume) * N / 2, sd.cam);
+      newDist = pdists[i] + 5;
       threads[i] = std::thread(LineFollower<N, TerrainCache<N, TerGen>>(
           currDist, newDist, TerrainCache<N, TerGen>{terGen, terCacheVol},
-          facesManagers[i], controllers[i]));
+          facesManager, controllers[i], i));
       currDist = newDist;
-      currVolume = newVolume;
     }
   }
 
   ~TerrainRenderer() {
     for (std::size_t i = numThreads; i--;) {
-      controllers[i].queue_op({nullptr, nullptr, nullptr, true});
+      controllers[i].queue_op({nullptr, nullptr, true});
       threads[i].join();
     }
   }
 
   float *writeTriangles(const SliceDirs<N> &nsd, float *out, float *out_fend) {
-    sd = nsd;
-    for (std::size_t i = numThreads; i--;) {
-      facesManagers[i].setCam(&sd.cam[0]);
-    }
-
     Line<N> *lines_end = getLines(sd, dists[0], lines.get());
+
+    sd = nsd;
+    facesManager.setCam(&sd.cam[0]);
+    facesManager.clearNotThreadSafe(); // I need the fence after getLines, yes?
     for (std::size_t i = numThreads; i--;) {
-      controllers[i].queue_op({lines.get(), lines_end, &sd.cam[0], false});
+      controllers[i].queue_op({lines.get(), lines_end, false});
     }
     for (std::size_t i = numThreads; i--;) {
       while (true) {
@@ -83,13 +78,10 @@ public:
         if (!controllers[i].queued_op) {
           break;
         }
-        std::this_thread::sleep_for(std::chrono::microseconds{2});
+        std::this_thread::sleep_for(std::chrono::microseconds{1});
       }
     }
-    for (std::size_t i = numThreads; i--;) {
-      out = facesManagers[i].fillVertexAttribPointer(out, out_fend);
-    }
-    return out;
+    return facesManager.fillVertexAttribPointer(out, out_fend);
   }
 };
 

@@ -5,16 +5,19 @@
 #include <unordered_map>
 #include <utility>
 
-#include "pool_linked_list.hpp"
+#include "concurrent_hashtable.hpp"
 #include "primitives.hpp"
 
 namespace hypervoxel {
 
 inline double ab(double a) { return a < 0 ? -a : a; }
 
+#define MAX_THREADS 64
+
 template <std::size_t N> class FacesManager {
 
   struct Face {
+
     v::IVec<N> c;
     std::size_t dim;
 
@@ -35,62 +38,66 @@ template <std::size_t N> class FacesManager {
     Color color;
     std::size_t edgeCount = 0;
     v::DVec<3> edges[2 * N][2];
-    /* plist::Node */ void *listEntry = nullptr;
   };
 
-  typedef std::unordered_map<Face, Entry, FaceHash> umap;
-  typedef PoolLinkedList<typename umap::iterator> plist;
+  typedef ConcurrentHashMapNoResize<Face, Entry, FaceHash, std::equal_to<Face>>
+      umap;
 
   umap map;
-  plist list;
+  std::size_t currSizes[MAX_THREADS]{0};
   std::size_t maxSize;
+  std::size_t threadLocalMaxSize;
   v::DVec<N> cam;
 
   template <class GetColor>
   void storeEdge(const v::IVec<N> &coord, std::size_t dim,
                  const GetColor &getColor, const v::DVec<3> &a,
-                 const v::DVec<3> &b) {
-    auto pp = map.emplace(Face{coord, dim}, Entry{});
-    auto next = pp.first;
-    Entry &e = next->second;
-    if (pp.second) {
-      e.color = getColor();
-      e.listEntry = list.addToBeg(next);
-    }
-    e.edges[e.edgeCount][0] = a;
-    e.edges[e.edgeCount++][1] = b;
+                 const v::DVec<3> &b, std::size_t threadi) {
+    map.findAndRun(Face{coord, dim},
+                   [this, &getColor, &a, &b, threadi](Entry &e) -> void {
+                     if (!e.edgeCount) {
+                       currSizes[threadi]++;
+                       e.color = getColor();
+                     }
+                     e.edges[e.edgeCount][0] = a;
+                     e.edges[e.edgeCount++][1] = b;
+                   });
   }
 
   template <class BlockData>
   void storeEdge(const v::IVec<N> &coord, std::size_t dim,
                  const BlockData &bdata, std::size_t param, const v::DVec<3> &a,
-                 const v::DVec<3> &b) {
+                 const v::DVec<3> &b, std::size_t threadi) {
     storeEdge(coord, dim,
               [&bdata, param]() -> Color { return bdata.getColor(param); }, a,
-              b);
+              b, threadi);
   }
 
 public:
-  FacesManager(std::size_t maxSize, const v::DVec<N> &cam)
-      : map(maxSize * 2), list(maxSize), maxSize(maxSize), cam(cam) {}
+  FacesManager(std::size_t maxSize, std::size_t threadLocalMaxSize,
+               const v::DVec<N> &cam)
+      : map(ceilLog2(maxSize) + 1), maxSize(maxSize),
+        threadLocalMaxSize(threadLocalMaxSize), cam(cam) {}
 
-  FacesManager() : maxSize(8) {}
+  FacesManager() : map(4), maxSize(8) {}
 
-  void clear() {
-    map.clear();
-    list.clear();
+  void clearNotThreadSafe() {
+    for (std::size_t i = MAX_THREADS; i--;) {
+      currSizes[i] = 0;
+    }
+    map.clearNotThreadsafe();
   }
+
+  void acquireClear() { map.acquireClear(); }
 
   void setCam(const double *ncam) { cam.copyFrom(ncam); }
 
   /// modifies coord. Do not use afterwards
   template <class TerGen>
   bool addEdge(v::IVec<N> &coord, std::size_t dim1, std::size_t dim2,
-               v::DVec<3> a, v::DVec<3> b, TerGen &terGen) {
-    if (list.invSize() < 2) {
-      return false;
-    }
-    if (map.bucket_count() - map.size() < 2) {
+               v::DVec<3> a, v::DVec<3> b, TerGen &terGen,
+               std::size_t threadi) {
+    if (currSizes[threadi] + 3 > maxSize) {
       return false;
     }
 
@@ -124,12 +131,12 @@ public:
     if (!front.isOpaque()) {
       if (s1.isVisible()) {
         coord[dim1] += cmod1;
-        storeEdge(coord, dim1, s1, tdim1, a, b);
+        storeEdge(coord, dim1, s1, tdim1, a, b, threadi);
         coord[dim1] -= cmod1;
       }
       if (s2.isVisible()) {
         coord[dim2] += cmod2;
-        storeEdge(coord, dim2, s2, tdim2, a, b);
+        storeEdge(coord, dim2, s2, tdim2, a, b, threadi);
         coord[dim2] -= cmod2;
       }
     }
@@ -137,14 +144,14 @@ public:
       if (!s1.isOpaque()) {
         coord[dim1] += mod1;
         coord[dim2] += cmod2;
-        storeEdge(coord, dim2, back, tdim2, a, b);
+        storeEdge(coord, dim2, back, tdim2, a, b, threadi);
         coord[dim2] -= cmod2;
         coord[dim1] -= mod1;
       }
       if (!s2.isOpaque()) {
         coord[dim2] += mod2;
         coord[dim1] += cmod1;
-        storeEdge(coord, dim1, back, tdim1, a, b);
+        storeEdge(coord, dim1, back, tdim1, a, b, threadi);
         coord[dim1] -= cmod1;
         coord[dim2] -= mod2;
       }
@@ -153,14 +160,18 @@ public:
   }
 
   float *fillVertexAttribPointer(float *out, float *out_fend) {
+    std::atomic_thread_fence(std::memory_order_acquire);
     float *out_end = out_fend - 21 * N * (N - 1) * (N - 2);
-    for (typename plist::iterator iter = list.begin(), iter_end = list.end();
-         iter != iter_end; ++iter) {
+    for (std::size_t i = map.size; i--;) {
       if (out >= out_end) {
         break;
       }
 
-      Entry &fe = (*iter)->second;
+      auto &e = map.table[i];
+      if (e.hash.load(std::memory_order_relaxed) == 0) {
+        continue;
+      }
+      Entry &fe = map.table[i].value.second;
       if (fe.edgeCount < 3) {
         continue;
       }
