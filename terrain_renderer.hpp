@@ -68,7 +68,7 @@ public:
 
     sd = nsd;
     facesManager.setCam(&sd.cam[0]);
-    facesManager.clearNotThreadSafe(); // I need the fence after getLines, yes?
+    facesManager.clear(); // I need the fence after getLines, yes?
     for (std::size_t i = numThreads; i--;) {
       controllers[i].queue_op({lines.get(), lines_end, false});
     }

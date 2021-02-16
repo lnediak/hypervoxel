@@ -14,7 +14,7 @@ inline int ceilLog2(std::uint64_t v) {
                          34, 43, 4,  62, 52, 38, 41, 50, 19, 29, 21, 56, 31,
                          35, 12, 44, 15, 23, 5,  63, 58, 47, 53, 39, 27, 33,
                          42, 51, 37, 18, 20, 30, 11, 14, 22, 57, 46, 26, 32,
-                         36, 17, 10,  13, 45, 25, 16, 9,  24, 8,  7,  6};
+                         36, 17, 10, 13, 45, 25, 16, 9,  24, 8,  7,  6};
   v--;
   v |= v >> 1;
   v |= v >> 2;
@@ -22,7 +22,7 @@ inline int ceilLog2(std::uint64_t v) {
   v |= v >> 8;
   v |= v >> 16;
   v |= v >> 32;
-  return tab64[((std::uint64_t)((v - (v >> 1))*0x07EDD5E59A4E28C2)) >> 58];
+  return tab64[((std::uint64_t)((v - (v >> 1)) * 0x07EDD5E59A4E28C2)) >> 58];
 }
 
 template <class K, class V, class Hash, class Eq, class Mutex = std::mutex>
@@ -51,7 +51,7 @@ struct ConcurrentHashMapNoResize {
         table(new Entry[size]), hasher{}, eqer{} {}
 
   /// run acquireClear after running this
-  void clearNotThreadsafe() {
+  void clear() {
     for (std::size_t i = 0; i < size; i++) {
       table[i].hash.store(0, std::memory_order_relaxed);
     }
@@ -90,6 +90,83 @@ struct ConcurrentHashMapNoResize {
         }
       }
     }
+  }
+};
+
+template <class K, class V, class Hash, class Eqer> struct ConcurrentCacher {
+
+  static const std::size_t nullage = -1;
+  struct Val {
+    V v;
+    std::size_t age = nullage;
+  };
+  typedef ConcurrentHashMapNoResize<K, Val, Hash, Eqer> table_t;
+  table_t tables[2];
+  std::atomic<std::size_t> sizes[2];
+  /// table_t *main = &tables[flags & 1]
+  /// table_t *other = &tables[!(flags & 1)]
+  /// table_t *back = (flags & 2)? other : nullptr
+  std::atomic<int> flags;
+  std::size_t minSize, maxSize;
+
+  ConcurrentCacher(std::size_t sizeBits, std::size_t minSize,
+                   std::size_t maxSize)
+      : tables{{sizeBits}, {sizeBits}}, sizes{0, 0}, minSize(minSize),
+        maxSize(maxSize) {}
+
+  template <class F>
+  decltype(std::declval<F>()(std::declval<V &>())) findAndRun(const K &k,
+                                                              F &&functor) {
+    typedef decltype(functor(std::declval<V &>())) ret_t;
+    int flagsl = flags.load(std::memory_order_relaxed);
+    int flagsl1 = flagsl & 1;
+    int flagsl0 = !flagsl1;
+    table_t *mp = &tables[flagsl1];
+    std::atomic<std::size_t> *ms = &sizes[flagsl1];
+    table_t *other = &tables[flagsl0];
+    std::atomic<std::size_t> *os = &sizes[flagsl0];
+    if (flagsl & 2) {
+      return mp->findAndRun(
+          k,
+          [this, &k, flagsl, flagsl0, mp, ms, other, os,
+           &functor](Val &val) -> ret_t {
+            if (val.age == nullage) {
+              return other->findAndRun(
+                  k,
+                  [this, flagsl, flagsl0, mp, ms, other, os,
+                   &functor](Val &val) -> ret_t {
+                    if (val.age == nullage) {
+                      val.age = os->fetch_add(1, std::memory_order_relaxed);
+                      if (val.age >= minSize) {
+                        int tmp = flagsl;
+                        if (flags.compare_exchange_strong(
+                                tmp, flagsl0, std::memory_order_relaxed)) {
+                          mp->clear();
+                          ms->store(0, std::memory_order_relaxed);
+                        }
+                      }
+                      return functor(val.v);
+                    }
+                    val.age = os->load(std::memory_order_relaxed);
+                    return functor(val.v);
+                  });
+            }
+            val.age = ms->load(std::memory_order_relaxed);
+            return functor(val.v);
+          });
+    }
+    return mp->findAndRun(
+        k, [this, flagsl, flagsl0, mp, ms, &functor](Val &val) -> ret_t {
+          if (val.age == nullage) {
+            val.age = ms->fetch_add(1, std::memory_order_relaxed);
+            if (val.age >= maxSize) {
+              flags.store(flagsl | 2, std::memory_order_relaxed);
+            }
+            return functor(val.v);
+          }
+          val.age = ms->load(std::memory_order_relaxed);
+          return functor(val.v);
+        });
   }
 };
 

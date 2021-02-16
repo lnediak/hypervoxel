@@ -81,11 +81,11 @@ public:
 
   FacesManager() : map(4), maxSize(8) {}
 
-  void clearNotThreadSafe() {
+  void clear() {
     for (std::size_t i = MAX_THREADS; i--;) {
       currSizes[i] = 0;
     }
-    map.clearNotThreadsafe();
+    map.clear();
   }
 
   void acquireClear() { map.acquireClear(); }
