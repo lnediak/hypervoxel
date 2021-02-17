@@ -46,13 +46,10 @@ public:
                     N, TerrainCache<N, TerGen>>::Controller[numThreads]()),
         threads(new std::thread[numThreads]), sd(sd) {
     std::copy(pdists, pdists + numThreads, dists.get());
-    double currDist = 0;
-    double newDist;
+    double farDist = pdists[0] + 5;
     for (std::size_t i = numThreads; i--;) {
-      newDist = pdists[i] + 5;
       threads[i] = std::thread(LineFollower<N, TerrainCache<N, TerGen>>(
-          currDist, newDist, terCache, facesManager, controllers[i], i));
-      currDist = newDist;
+          0, farDist, terCache, facesManager, controllers[i], numThreads, i));
     }
   }
 

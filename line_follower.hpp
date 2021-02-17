@@ -44,7 +44,7 @@ private:
 
   Controller &controller;
 
-  std::size_t threadi;
+  std::size_t numThreads, threadi;
 
   // helpers
 
@@ -67,11 +67,10 @@ private:
   };
 
 public:
-  LineFollower(double dist1, double dist2, TerGen &terGenr,
-               FacesManager<N> &out, Controller &controller,
-               std::size_t threadi)
-      : dist1(dist1), dist2(dist2), terGen(terGenr), out(out),
-        controller(controller), threadi(threadi) {}
+  LineFollower(double dist1, double dist2, TerGen &terGenr, FacesManager<N> &out, Controller &controller,
+               std::size_t numThreads, std::size_t threadi)
+      : dist1(dist1), dist2(dist2), terGen(terGenr), out(out), controller(controller),
+        numThreads(numThreads), threadi(threadi) {}
 
   LineFollower(const LineFollower &) = delete;
   LineFollower(LineFollower &&) = default;
@@ -97,7 +96,7 @@ public:
       if (shouldTerm) {
         return;
       }
-      for (; lines != lines_end; ++lines) {
+      for (lines += threadi; lines <= lines_end; lines += numThreads) {
         if (lines->a3[2] > dist2 || lines->b3[2] < dist1) {
           continue;
         }

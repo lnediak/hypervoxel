@@ -71,10 +71,10 @@ int main() {
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
   // double pdists[] = {25, 23.91, 22.714, 21.375, 19.843, 18.028, 15.749, 12.5};
-  double pdists[] = {25, 22.714, 19.843, 15.749};
+  // double pdists[] = {25, 22.714, 19.843, 15.749};
   // double pdists[] = {50, 47.82, 45.428, 42.75, 39.686, 36.056, 31.498, 25};
   // double pdists[] = {50, 45.428, 39.686, 31.498};
-  //double pdists[] = {30};
+  double pdists[] = {30};
   double sq12 = std::sqrt(.5);
   /*
   hypervoxel::SliceDirs<5> sd = {{0.1, 0.1, 0.1, 0.1, 0.1},
@@ -84,20 +84,20 @@ int main() {
                                  1,
                                  1};
   */
-  /*
   hypervoxel::SliceDirs<4> sd = {{0.1, 0.1, 0.1, 0.1},
                                  {0, 0, sq12, -sq12},
                                  {.5, .5, -.5, -.5},
                                  {sq12, -sq12, 0, 0},
                                  1,
                                  1};
-  */
+  /*
   hypervoxel::SliceDirs<4> sd = {{0.1, 0.1, 0.1, 0.1},
                                  {1, 0, 0, 0},
                                  {0, 1, 0, 0},
                                  {0, 0, 1, 0},
                                  1,
                                  1};
+  */
   // hypervoxel::SliceDirs<3> sd = {{0.1, 0.1, -3.1}, {0, 0, 1}, {1, 0, 0}, {0,
   // 1, 0}, 1, 1};
   std::size_t numGradVecs = 4096;
@@ -128,7 +128,7 @@ int main() {
     float *tmpend = renderer.writeTriangles(sd, triangles.get(), triangles_end);
     prog.renderTriangles(triangles.get(), tmpend);
     sd.cam += 0.01;
-   sd.cam[3] -= 0.01;
+    // sd.cam[3] -= 0.01;
 
     auto dur = std::chrono::high_resolution_clock::now() - beg;
     double secs =
