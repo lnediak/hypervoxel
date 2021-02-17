@@ -12,17 +12,19 @@ template <class CMap> struct ThreadFun {
   void operator()() {
     for (std::size_t kk = 1000; kk--;) {
       if (i + kk == 1000000) {
-        std::cout << "WHOOOHOOOO!!! IMPOSSIBLE!!!! L33T H4X0R!!!!!!" << std::endl;
+        std::cout << "WHOOOHOOOO!!! IMPOSSIBLE!!!! L33T H4X0R!!!!!!"
+                  << std::endl;
       }
     }
     for (std::size_t j = 10; j--;) {
       int val = i + j * 100;
-      map.findAndRun(256 * i, [this, val](std::atomic<int> &v) -> void {
+      map.findAndRun(256 * i, [this, val](std::atomic<int> &v, bool) -> void {
         v.store(val, std::memory_order_relaxed);
       });
-      map.findAndRun(256 * i + 131072, [this, val](std::atomic<int> &v) -> void {
-        v.store(val, std::memory_order_relaxed);
-      });
+      map.findAndRun(256 * i + 131072,
+                     [this, val](std::atomic<int> &v, bool) -> void {
+                       v.store(val, std::memory_order_relaxed);
+                     });
     }
   };
 };
@@ -53,5 +55,26 @@ int main() {
     std::cout << "hash: " << hash << std::endl;
   }
   std::cout << "TOTAL ELEMENTS: " << count << std::endl;
+  std::cout << std::endl << std::endl << std::endl << std::endl << std::endl;
+
+  // ---------------------------------------
+
+  const std::size_t csizeBits = 8;
+  const std::size_t cminSize = 32;
+  const std::size_t cmaxSize = 128;
+  hypervoxel::ConcurrentCacher<int, int, std::hash<int>, std::equal_to<int>>
+      cache(csizeBits, cminSize, cmaxSize);
+  for (std::size_t i = 0; i < 20000; i++) {
+    cache.findAndRun((i * i * i * i * i * i * i * i * i * i) % 200,
+                     [i](int &v, bool) -> void { v = 0; });
+  }
+  for (std::size_t i = 0; i < 200; i++) {
+    cache.runIfFound(i,
+                     [i](int &v) -> int {
+                       std::cout << i << ": " << v << std::endl;
+                       return 0;
+                     },
+                     0);
+  }
 }
 

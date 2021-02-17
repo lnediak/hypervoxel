@@ -39,8 +39,7 @@ public:
 private:
   const Line<N> *lines = nullptr, *lines_end = nullptr;
   double dist1, dist2;
-  double dist1s, dist2s;
-  TerGen terGen;
+  TerGen &terGen;
   FacesManager<N> &out;
 
   Controller &controller;
@@ -68,11 +67,10 @@ private:
   };
 
 public:
-  LineFollower(double dist1, double dist2, TerGen &&terGenr,
+  LineFollower(double dist1, double dist2, TerGen &terGenr,
                FacesManager<N> &out, Controller &controller,
                std::size_t threadi)
-      : dist1(dist1), dist2(dist2), dist1s(dist1 * dist1),
-        dist2s(dist2 * dist2), terGen(std::move(terGenr)), out(out),
+      : dist1(dist1), dist2(dist2), terGen(terGenr), out(out),
         controller(controller), threadi(threadi) {}
 
   LineFollower(const LineFollower &) = delete;

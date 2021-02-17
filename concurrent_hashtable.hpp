@@ -62,8 +62,8 @@ struct ConcurrentHashMapNoResize {
   void acquireClear() { std::atomic_thread_fence(std::memory_order_acquire); }
 
   template <class F>
-  decltype(std::declval<F>()(std::declval<V &>())) findAndRun(const K &k,
-                                                              F &&functor) {
+  decltype(std::declval<F>()(std::declval<V &>(), false))
+  findAndRun(const K &k, F &&functor) {
     std::size_t kh = hasher(k);
     std::size_t khm = kh | hashmask;
     Entry *tptr = table.get();
@@ -80,8 +80,31 @@ struct ConcurrentHashMapNoResize {
           tmp->hash.store(khm, std::memory_order_relaxed);
           tmp->value.first = k;
           ::new (&tmp->value.second) V{};
+          return functor(tmp->value.second, true);
         }
-        return functor(tmp->value.second);
+        return functor(tmp->value.second, false);
+      }
+      if (hash == khm) {
+        std::unique_lock<Mutex> ll(tmp->lock);
+        if (eqer(k, tmp->value.first)) {
+          return functor(tmp->value.second, false);
+        }
+      }
+    }
+  }
+
+  template <class F>
+  decltype(std::declval<F>()(std::declval<V &>()))
+  runIfFound(const K &k, F &&functor,
+             const decltype(functor(std::declval<V &>())) &def) {
+    std::size_t kh = hasher(k);
+    std::size_t khm = kh | hashmask;
+    Entry *tptr = table.get();
+    for (std::size_t i = kh & sizeMask;; i = (i + 1) & sizeMask) {
+      Entry *tmp = tptr + i;
+      std::size_t hash = tmp->hash.load(std::memory_order_relaxed);
+      if (hash == 0) {
+        return def;
       }
       if (hash == khm) {
         std::unique_lock<Mutex> ll(tmp->lock);
@@ -93,14 +116,55 @@ struct ConcurrentHashMapNoResize {
   }
 };
 
-template <class K, class V, class Hash, class Eqer> struct ConcurrentCacher {
+template <class T> struct CondVal {
+  char val[sizeof(T)];
+  bool valid;
 
-  static const std::size_t nullage = -1;
-  struct Val {
-    V v;
-    std::size_t age = nullage;
-  };
-  typedef ConcurrentHashMapNoResize<K, Val, Hash, Eqer> table_t;
+  CondVal() : valid{false} {}
+  CondVal(T &&rval) : valid{true} { *reinterpret_cast<T *>(val) = rval; }
+
+  T operator()() { return *reinterpret_cast<T *>(val); }
+};
+template <> struct CondVal<void> {
+  bool valid;
+
+  CondVal() : valid{false} {}
+  CondVal(int) : valid{true} {}
+
+  void operator()() {}
+};
+template <class T, class F, class... Args> struct EvalCondVal {
+  CondVal<T> operator()(F &&fun, Args &&... args) { return fun(args...); }
+};
+template <class F, class... Args> struct EvalCondVal<void, F, Args...> {
+  CondVal<void> operator()(F &&fun, Args &&... args) {
+    fun(args...);
+    return {};
+  }
+};
+template <class T> struct WrapVal {
+  T val;
+  WrapVal(const T &val) : val(val) {}
+  WrapVal(T &&val) : val(val) {}
+
+  T operator()() { return val; }
+};
+template <> struct WrapVal<void> {
+  void operator()() {}
+};
+template <class T, class F, class... Args> struct EvalWrapVal {
+  WrapVal<T> operator()(F &&fun, Args &&... args) { return fun(args...); }
+};
+template <class F, class... Args> struct EvalWrapVal<void, F, Args...> {
+  WrapVal<void> operator()(F &&fun, Args &&... args) {
+    fun(args...);
+    return {};
+  }
+};
+
+template <class K, class V, class Hash, class Eqer> class ConcurrentCacher {
+
+  typedef ConcurrentHashMapNoResize<K, V, Hash, Eqer> table_t;
   table_t tables[2];
   std::atomic<std::size_t> sizes[2];
   /// table_t *main = &tables[flags & 1]
@@ -109,14 +173,70 @@ template <class K, class V, class Hash, class Eqer> struct ConcurrentCacher {
   std::atomic<int> flags;
   std::size_t minSize, maxSize;
 
+public:
   ConcurrentCacher(std::size_t sizeBits, std::size_t minSize,
                    std::size_t maxSize)
-      : tables{{sizeBits}, {sizeBits}}, sizes{0, 0}, minSize(minSize),
-        maxSize(maxSize) {}
+      : tables{table_t(sizeBits), table_t(sizeBits)}, sizes{{0}, {0}}, flags{0},
+        minSize(minSize), maxSize(maxSize) {}
 
   template <class F>
-  decltype(std::declval<F>()(std::declval<V &>())) findAndRun(const K &k,
-                                                              F &&functor) {
+  decltype(std::declval<F>()(std::declval<V &>(), false))
+  findAndRun(const K &k, F &&functor) {
+    typedef decltype(functor(std::declval<V &>(), false)) ret_t;
+    int flagsl = flags.load(std::memory_order_relaxed);
+    int flagsl1 = flagsl & 1;
+    int flagsl0 = !flagsl1;
+    table_t *mp = &tables[flagsl1];
+    std::atomic<std::size_t> *ms = &sizes[flagsl1];
+    table_t *other = &tables[flagsl0];
+    std::atomic<std::size_t> *os = &sizes[flagsl0];
+    if (flagsl & 2) {
+      CondVal<ret_t> val = mp->runIfFound(
+          k,
+          [&functor](V &val) -> CondVal<ret_t> {
+            return EvalCondVal<ret_t, F &, V &, bool>{}(functor, val, false);
+          },
+          {});
+      if (val.valid) {
+        return val();
+      }
+      bool needClearM = false;
+      WrapVal<ret_t> toreturn = other->findAndRun(
+          k,
+          [this, &needClearM, &os, &functor](V &val,
+                                             bool isNew) -> WrapVal<ret_t> {
+            if (isNew) {
+              needClearM =
+                  os->fetch_add(1, std::memory_order_relaxed) >= minSize;
+            }
+            return EvalWrapVal<ret_t, F &, V &, bool &>{}(functor, val, isNew);
+          });
+      if (needClearM) {
+        if (flags.compare_exchange_strong(flagsl, flagsl0,
+                                          std::memory_order_relaxed)) {
+          ms->store(0, std::memory_order_relaxed);
+          mp->clear();
+        }
+      }
+      return toreturn();
+    }
+    return mp->findAndRun(
+        k,
+        [this, flagsl, flagsl0, mp, ms, &functor](V &val, bool isNew) -> ret_t {
+          if (isNew) {
+            std::size_t cms = ms->fetch_add(1, std::memory_order_relaxed);
+            if (cms >= maxSize) {
+              flags.store(flagsl | 2, std::memory_order_relaxed);
+            }
+          }
+          return functor(val, isNew);
+        });
+  }
+
+  template <class F>
+  decltype(std::declval<F>()(std::declval<V &>()))
+  runIfFound(const K &k, F &&functor,
+             const decltype(functor(std::declval<V &>())) &def) {
     typedef decltype(functor(std::declval<V &>())) ret_t;
     int flagsl = flags.load(std::memory_order_relaxed);
     int flagsl1 = flagsl & 1;
@@ -126,47 +246,24 @@ template <class K, class V, class Hash, class Eqer> struct ConcurrentCacher {
     table_t *other = &tables[flagsl0];
     std::atomic<std::size_t> *os = &sizes[flagsl0];
     if (flagsl & 2) {
-      return mp->findAndRun(
-          k,
-          [this, &k, flagsl, flagsl0, mp, ms, other, os,
-           &functor](Val &val) -> ret_t {
-            if (val.age == nullage) {
-              return other->findAndRun(
-                  k,
-                  [this, flagsl, flagsl0, mp, ms, other, os,
-                   &functor](Val &val) -> ret_t {
-                    if (val.age == nullage) {
-                      val.age = os->fetch_add(1, std::memory_order_relaxed);
-                      if (val.age >= minSize) {
-                        int tmp = flagsl;
-                        if (flags.compare_exchange_strong(
-                                tmp, flagsl0, std::memory_order_relaxed)) {
-                          mp->clear();
-                          ms->store(0, std::memory_order_relaxed);
-                        }
-                      }
-                      return functor(val.v);
-                    }
-                    val.age = os->load(std::memory_order_relaxed);
-                    return functor(val.v);
-                  });
-            }
-            val.age = ms->load(std::memory_order_relaxed);
-            return functor(val.v);
-          });
+      CondVal<ret_t> val =
+          mp->runIfFound(k,
+                         [&functor](V &val) -> CondVal<ret_t> {
+                           return EvalCondVal<ret_t, F &, V &>{}(functor, val);
+                         },
+                         {});
+      if (val.valid) {
+        return *reinterpret_cast<ret_t *>(val.val);
+      }
+      return other->runIfFound(k,
+                               [this, flagsl, flagsl0, mp, ms, os, &functor](
+                                   V &val) -> ret_t { return functor(val); },
+                               def);
     }
-    return mp->findAndRun(
-        k, [this, flagsl, flagsl0, mp, ms, &functor](Val &val) -> ret_t {
-          if (val.age == nullage) {
-            val.age = ms->fetch_add(1, std::memory_order_relaxed);
-            if (val.age >= maxSize) {
-              flags.store(flagsl | 2, std::memory_order_relaxed);
-            }
-            return functor(val.v);
-          }
-          val.age = ms->load(std::memory_order_relaxed);
-          return functor(val.v);
-        });
+    return mp->runIfFound(k,
+                          [this, flagsl, flagsl0, mp, ms,
+                           &functor](V &val) -> ret_t { return functor(val); },
+                          def);
   }
 };
 

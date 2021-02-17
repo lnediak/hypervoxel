@@ -6,6 +6,9 @@ basic_test: basic_test.o
 basic_test.o: basic_test.cpp *.hpp
 	g++ basic_test.cpp -c -o basic_test.o -ftemplate-backtrace-limit=0 -std=c++11 -Wall -Wextra -pedantic -g3 -O2
 
+chtbl_test: chtbl_test.cpp concurrent_hashtable.hpp
+	g++ chtbl_test.cpp -lpthread -o chtbl_test -ftemplate-backtrace-limit=0 -Wall -Wextra -pedantic -g3 -O2
+
 clean:
 	/bin/rm basic_test.o basic_test
 

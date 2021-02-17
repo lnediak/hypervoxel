@@ -54,7 +54,7 @@ template <std::size_t N> class FacesManager {
                  const GetColor &getColor, const v::DVec<3> &a,
                  const v::DVec<3> &b, std::size_t threadi) {
     map.findAndRun(Face{coord, dim},
-                   [this, &getColor, &a, &b, threadi](Entry &e) -> void {
+                   [this, &getColor, &a, &b, threadi](Entry &e, bool) -> void {
                      if (!e.edgeCount) {
                        currSizes[threadi]++;
                        e.color = getColor();
