@@ -1,7 +1,6 @@
 #ifndef TERRAIN_RENDERER_HPP_
 #define TERRAIN_RENDERER_HPP_
 
-#include <chrono>
 #include <memory>
 #include <thread>
 
@@ -25,8 +24,6 @@ template <std::size_t N, class TerGen> class TerrainRenderer {
       controllers;
   std::unique_ptr<std::thread[]> threads;
 
-  SliceDirs<N> sd;
-
 public:
   /// pdists decreasing
   TerrainRenderer(TerGen &&tterGen, std::size_t terCacheMin,
@@ -44,7 +41,7 @@ public:
         facesManager(facesManagerSize, facesManagerSize / numThreads, sd.cam),
         controllers(new typename LineFollower<
                     N, TerrainCache<N, TerGen>>::Controller[numThreads]()),
-        threads(new std::thread[numThreads]), sd(sd) {
+        threads(new std::thread[numThreads]) {
     std::copy(pdists, pdists + numThreads, dists.get());
     double farDist = pdists[0] + 5;
     for (std::size_t i = numThreads; i--;) {
@@ -60,10 +57,8 @@ public:
     }
   }
 
-  float *writeTriangles(const SliceDirs<N> &nsd, float *out, float *out_fend) {
+  float *writeTriangles(const SliceDirs<N> &sd, float *out, float *out_fend) {
     Line<N> *lines_end = getLines(sd, dists[0], lines.get());
-
-    sd = nsd;
     facesManager.setCam(&sd.cam[0]);
     facesManager.clear(); // I need the fence after getLines, yes?
     for (std::size_t i = numThreads; i--;) {
@@ -75,7 +70,7 @@ public:
         if (!controllers[i].queued_op) {
           break;
         }
-        std::this_thread::sleep_for(std::chrono::microseconds{1});
+        std::this_thread::yield();
       }
     }
     return facesManager.fillVertexAttribPointer(out, out_fend);

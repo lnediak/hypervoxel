@@ -1,4 +1,5 @@
 *.o
+gmon.out
 callgrind.out.*
 basic_test
 chtbl_test

@@ -74,7 +74,7 @@ int main() {
   // double pdists[] = {25, 22.714, 19.843, 15.749};
   // double pdists[] = {50, 47.82, 45.428, 42.75, 39.686, 36.056, 31.498, 25};
   // double pdists[] = {50, 45.428, 39.686, 31.498};
-  double pdists[] = {30};
+  double pdists[] = {25};
   double sq12 = std::sqrt(.5);
   /*
   hypervoxel::SliceDirs<5> sd = {{0.1, 0.1, 0.1, 0.1, 0.1},
@@ -107,7 +107,7 @@ int main() {
       renderer(
           hypervoxel::TerrainGeneratorPerlin<4>{
               {{32, 32, 32, 32}, gradVecs.get(), numGradVecs - 1, 3, 0.5}},
-          100000, 400000, 100000, 4, pdists, sd);
+          100000, 600000, 100000, 4, pdists, sd);
   const std::size_t lenTriangles = 21 * 1048576;
   std::unique_ptr<float[]> triangles(new float[lenTriangles]);
   float *triangles_end = triangles.get() + lenTriangles;

@@ -64,17 +64,22 @@ int main() {
   const std::size_t cmaxSize = 128;
   hypervoxel::ConcurrentCacher<int, int, std::hash<int>, std::equal_to<int>>
       cache(csizeBits, cminSize, cmaxSize);
-  for (std::size_t i = 0; i < 20000; i++) {
+  for (std::size_t i = 0; i < (cminSize + cmaxSize) * 100 - 20; i++) {
     cache.findAndRun((i * i * i * i * i * i * i * i * i * i) % 200,
-                     [i](int &v, bool) -> void { v = 0; });
+                     [i](int &v, bool) -> void { v = i; });
   }
   for (std::size_t i = 0; i < 200; i++) {
-    cache.runIfFound(i,
-                     [i](int &v) -> int {
-                       std::cout << i << ": " << v << std::endl;
-                       return 0;
-                     },
-                     0);
+    cache.runIfFound(
+        i,
+        [i](int &v) -> int {
+          std::cout << i << ": " << v << std::endl;
+          std::size_t vv = v;
+          if ((vv * vv * vv * vv * vv * vv * vv * vv * vv * vv) % 200 != i) {
+            std::cout << "INVALID!!!" << std::endl;
+          }
+          return 0;
+        },
+        0);
   }
 }
 
