@@ -13,15 +13,13 @@ namespace hypervoxel {
 
 template <std::size_t N, class TerGen> class TerrainRenderer {
 
-  TerrainCache<N, TerGen> terCache;
+  TerGen terCache;
   std::unique_ptr<Line<N>[]> lines;
   std::size_t numThreads;
   std::unique_ptr<double[]> dists;
 
   FacesManager<N> facesManager;
-  std::unique_ptr<
-      typename LineFollower<N, TerrainCache<N, TerGen>>::Controller[]>
-      controllers;
+  std::unique_ptr<typename LineFollower<N, TerGen>::Controller[]> controllers;
   std::unique_ptr<std::thread[]> threads;
 
 public:
@@ -30,7 +28,7 @@ public:
                   std::size_t terCacheMax, std::size_t facesManagerSize,
                   std::size_t numThreads, double *pdists,
                   const SliceDirs<N> &sd)
-      : terCache(std::move(tterGen), terCacheMin, terCacheMax),
+      : terCache(std::move(tterGen)),
         lines(new Line<N>[((N * (N - 1)) / 2) *
                           static_cast<std::size_t>(
                               (pdists[0] + 5) * (pdists[0] + 5) *
@@ -39,13 +37,13 @@ public:
                               3 * pdists[0])]),
         numThreads(numThreads), dists(new double[numThreads]),
         facesManager(facesManagerSize, facesManagerSize / numThreads, sd.cam),
-        controllers(new typename LineFollower<
-                    N, TerrainCache<N, TerGen>>::Controller[numThreads]()),
+        controllers(new
+                    typename LineFollower<N, TerGen>::Controller[numThreads]()),
         threads(new std::thread[numThreads]) {
     std::copy(pdists, pdists + numThreads, dists.get());
     double farDist = pdists[0] + 5;
     for (std::size_t i = numThreads; i--;) {
-      threads[i] = std::thread(LineFollower<N, TerrainCache<N, TerGen>>(
+      threads[i] = std::thread(LineFollower<N, TerGen>(
           0, farDist, terCache, facesManager, controllers[i], numThreads, i));
     }
   }
