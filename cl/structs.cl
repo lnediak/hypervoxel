@@ -6,25 +6,32 @@ typedef struct FacesEdge {
 typedef struct FacesEntry {
 
   ushort colors[5];
-  FacesEdge edges[5][8][6];
+  FacesEdge edges[5][8];
 } FacesEntry;
 
+/// also caches terrain generator outputs
 typedef struct FacesCacher {
 
+  /// indexed by td, .x=color, .y=index in e below
+  /// index of 0xFFFF means unassigned
   __global ushort2 *tc;
   TerrainIndexer td;
 
-  ushort maxLen1;
-  volatile __local uint *len;
+  uint maxLen;
+  volatile __global uint *len;
   __global FacesEntry *e;
 };
 
+/// c should be filled with 0xFF
 void initFacesCacher(FacesCacher *f, __global ushort2 *c, const SliceDirs *d,
-                     size_t maxSize, volatile __local uint *len,
+                     size_t maxSize, volatile __global uint *len,
                      __global void *e) {
   f->tc = c;
   initTerrainCacher(&f->td, d, 1);
   f->maxLen = maxSize / sizeof(FacesEntry) - 1;
+  if (f->maxLen > 0xFFFF) {
+    f->maxLen = 0xFFFF;
+  }
   *len = 0;
   f->len = len;
   f->e = e;
@@ -34,10 +41,10 @@ __global ushort2 *getTerrainEntry(FacesCacher *f, int8 v) {
   return f->tc + getIndex(&f->td, v);
 }
 
-FacesEdge *getEdge(FacesCacher *f, int8 v, ushort color, uchar face, uchar d1,
-                   uchar d2) {
+FacesEdge *getEdge(FacesCacher *f, int8 v, ushort color, uchar face, uchar d) {
   __global ushort2 *lp = getTerrainEntry(f, v);
   uint ind = lp->y;
+  FacesEntry *e;
   if (ind == 0xFFFF) {
     ind = atomic_add(f->len, 1);
     if (ind >= maxLen) {
@@ -45,12 +52,31 @@ FacesEdge *getEdge(FacesCacher *f, int8 v, ushort color, uchar face, uchar d1,
       return NULL;
     }
     lp->y = ind;
+    e = &f->e[ind];
+    *(ulong2 *)&e = 0xFFFFFFFFFFFFFFFFU;
+    e->colors[4] = 0xFFFFU;
+  } else {
+    e = &f->e[ind];
   }
-  FacesEntry *e = &f->e[ind];
   e->colors[face] = color;
-  uchar d1f = d1 >= 5 ? d1 - 5 : d1 + 5;
-  return &e->edges[face][d1 - (d1 > face) - (d1 > face + 5)]
-                  [d2 - (d2 > face) - (d2 > face + 5) - (d2 > d1) - (d2 > d1f)];
+  return &e->edges[face][d - (d > face) - (d > face + 5)];
+}
+
+ushort getTerrain(FacesCacher *f, TerrainGenerator *g, int8 v) {
+  __global ushort2 *lp = getTerrainEntry(f, v);
+  ushort r = lp->x;
+  if (r == 0xFFFFU) {
+    return lp->x = generateTerrain(g, v);
+  }
+  return r;
+}
+
+bool addEdgeHelper(FacesEdge *ptr, FacesEdge toass) {
+  if (!ptr) {
+    return false;
+  }
+  *ptr = toass;
+  return true;
 }
 
 bool addEdge(FacesCacher *f, TerrainGenerator *g, int8 v, uchar d1, uchar d2,
@@ -70,16 +96,50 @@ bool addEdge(FacesCacher *f, TerrainGenerator *g, int8 v, uchar d1, uchar d2,
   } else {
     mod2 = -1;
   }
-
-  ushort front = generateTerrain(g, vns.v);
+  int8 fi = vns.v;
   vns.s[d1] += mod1;
-  ushort s1 = generateTerrain(g, vns.v);
+  int8 s1i = vns.v;
   vns.s[d2] += mod2;
-  ushort s1 = generateTerrain(g, vns.v);
+  int8 s2i = vns.v;
   vns.s[d1] -= mod1;
-  ushort back = generateTerrain(g, vns.v);
-  vns.s[d2] -= mod2;
+  int8 bi = vns.v;
 
-  if ();//TODO: PLEASE  CONTINUE FROM HERE KEK
+  ushort front = getTerrain(f, g, fi);
+  ushort s1 = getTerrain(f, g, s1i);
+  ushort s2 = getTerrain(f, g, s2i);
+  ushort back = getTerrain(f, g, bi);
+
+  bool fv = !(front & 0x8000U);
+  bool s1v = !(s1 & 0x8000U);
+  bool s2v = !(s2 & 0x8000U);
+  bool bv = !(back & 0x8000U);
+
+  FacesEdge edg = {a, b};
+
+  if (!fv) {
+    if (s1v) {
+      if (!addEdgeHelper(getEdge(f, s1i, s1, d1, d2), edg)) {
+        return false;
+      }
+    }
+    if (s2v) {
+      if (!addEdgeHelper(getEdge(f, s2i, s2, d2, d1), edg)) {
+        return false;
+      }
+    }
+  }
+  if (bv) {
+    if (!s1v) {
+      if (!addEdgeHelper(getEdge(f, bv, back, d2, d1), edg)) {
+        return false;
+      }
+    }
+    if (!s2v) {
+      if (!addEdgeHelper(getEdge(f, bv, back, d1, d2), edg)) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 

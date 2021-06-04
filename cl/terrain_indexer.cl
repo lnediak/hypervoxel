@@ -36,9 +36,9 @@ void initTerrainIndexer(TerrainIndexer *c, const SliceDirs *d, int sidel) {
   float8 tmpnrnu = tmpnr - umod;
   Int8NoScam lowest;
   lowest.v =
-      getFloor8(min(d->c, min(tmpru, min(tmprnu, min(tmpnru, tmpnrnu)))) - 1.1);
+      getFloor8(min(d->c, min(tmpru, min(tmprnu, min(tmpnru, tmpnrnu)))) - 1e-4);
   int8 higest =
-      getFloor8(max(d->c, max(tmpru, max(tmprnu, max(tmpnru, tmpnrnu)))) + 2.1);
+      getFloor8(max(d->c, max(tmpru, max(tmprnu, max(tmpnru, tmpnrnu)))) + 1.0001);
   Int8NoScam diffs;
   diffs.v = highest - lowest.v;
 
@@ -46,17 +46,18 @@ void initTerrainIndexer(TerrainIndexer *c, const SliceDirs *d, int sidel) {
   a.v = d->r;
   b.v = d->u;
   c.v = d->f;
-  size_t mDataS = 0x7FFFFFFF;
+  size_t mDataS = 0x7FFFFFFF; /// lol OpenCL ain't got no SIZE_T_MAX lol
   const int N = 5;
   for (int d1 = 0; d1 < N - 2; d1++) {
-    for (int d2 = a + 1; d2 < N - 1; d2++) {
-      for (int d3 = b + 1; d3 < N; d3++) {
+    for (int d2 = d1 + 1; d2 < N - 1; d2++) {
+      for (int d3 = d2 + 1; d3 < N; d3++) {
         float det = a.s[d1] * b.s[d2] * c.s[d3] + a.s[d2] * b.s[d3] * c.s[d1] +
                     a.s[d3] * b.s[d1] * c.s[d2] - a.s[d1] * b.s[d3] * c.s[d2] -
                     a.s[d2] * b.s[d1] * c.s[d3] - a.s[d3] * b.s[d2] * c.s[d1];
         if (-1e-4 < det && det < 1e-4) {
           continue;
         }
+        // columns of the inverse matrix
         float3 c1 = float3(b.s[d2] * c.s[d3] - b.s[d3] * c.s[d2],
                            a.s[d3] * c.s[d2] - a.s[d2] * c.s[d3],
                            a.s[d2] * b.s[d3] - a.s[d3] * b.s[d2]) /
@@ -82,6 +83,7 @@ void initTerrainIndexer(TerrainIndexer *c, const SliceDirs *d, int sidel) {
             break;
           }
         }
+        // rows of a 2x3 matrix product
         float3 m4 = float3(a.s[d4] * c1.s0 + b.s[d4] * c1.s1 + c.s[d4] * c1.s2,
                            a.s[d4] * c2.s0 + b.s[d4] * c2.s1 + c.s[d4] * c2.s2,
                            a.s[d4] * c3.s0 + b.s[d4] * c3.s1 + c.s[d4] * c3.s2);
@@ -105,8 +107,6 @@ void initTerrainIndexer(TerrainIndexer *c, const SliceDirs *d, int sidel) {
           c->d5 = d5;
           c->m4 = m4;
           c->m5 = m5;
-          c->o4 = d->c[d4];
-          c->o5 = d->c[d5];
 
           c->cs = int3(lowest.s[d1], lowest.s[d2], lowest.s[d3]);
           c->s4 = w5;
@@ -117,8 +117,13 @@ void initTerrainIndexer(TerrainIndexer *c, const SliceDirs *d, int sidel) {
       }
     }
   }
+
   Float8NoScam cam;
   cam.v = c->c = d->c;
+
+  c->o4 = cam.s[c->d4];
+  c->o5 = cam.s[c->d5];
+
   float3 defBase = float3(cam.s[c->d1], cam.s[c->d2], cam.s[c->d3]);
   c->b4 = defBase - sidel * float3(c->m4.s0 < 0, c->m4.s1 < 0, c->m4.s2 < 0);
   c->b5 = defBase - sidel * float3(c->m5.s0 < 0, c->m5.s1 < 0, c->m5.s2 < 0);

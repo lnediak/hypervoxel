@@ -14,8 +14,8 @@ typedef struct UInt32 {
 /// Perlin noise terrain generator
 typedef struct TerrainGenerator {
 
-  __global UInt32 *tc1;
-  __global float *tc2;
+  __global UInt32 *tc1; /// caching indices of corners, for tc2
+  __global float *tc2;  /// caching noise values on a fat grid
   TerrainIndexer td1, td2;
 
   PerlinOptions o;
@@ -23,10 +23,12 @@ typedef struct TerrainGenerator {
 
 #define TERGEN_CACHE_SCALE 16
 
+/// both c1 and c2 should be filled with 0xFF (that makes the floats NaN)
 void initTerrainGenerator(TerrainGenerator *g, __global UInt32 *c1,
-                          __global ushort *c2, const SliceDirs *d,
+                          __global float *c2, const SliceDirs *d,
                           PerlinOptions o) {
-  g->tc = c;
+  g->tc1 = c1;
+  g->tc2 = c2;
   SliceDirs dl;
   dl.c = d->c / TERGEN_CACHE_SCALE;
   dl.fm = d->fm / TERGEN_CACHE_SCALE;
@@ -137,12 +139,11 @@ float getTerrainVal(const TerrainGenerator *g, float8 v) {
     float8 l0 = v0 * v0 * (3 - 2 * v0);
     float8 l1 = 1 - l0; // == v1 * v1 * (3 - 2 * v1)
 
-    uint16 i0 = cornersIntHash5(vi) & g->o.numGradVecsMask;
+    uint16 i0 = (cornersIntHash5(vi) ^ i) & g->o.numGradVecsMask;
     float16 f0 = terGenHelp(g->o.gradVecs, i0, v0, v1, v0.s4);
-    vi[4]++;
-    uint16 i1 = cornersIntHash5(vi) & g->o.numGradVecsMask;
+    vi.s4++;
+    uint16 i1 = (cornersIntHash5(vi) ^ i) & g->o.numGradVecsMask;
     float16 f1 = terGenHelp(g->o.gradVecs, i1, v0, v1, v1.s4);
-    vi[4]--;
 
     float fl = superLerp(f0, f1, l0, l1);
 
@@ -169,40 +170,40 @@ float terGenCacheHelp(TerrainGenerator *g, __global uint *i, int8 vs,
 float16 terGenCacheHelp16(TerrainGenerator *g, __global uint *i, int8 vs,
                           int v4, float8 v) {
   float16 f0 = float16(
-      terGenCacheHelp(g, inds->s + 0, vs + int8(0, 0, 0, 0, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 0, vs + int8(0, 0, 0, 0, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(0, 0, 0, 0, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 1, vs + int8(0, 0, 0, 1, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 1, vs + int8(0, 0, 0, 1, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(0, 0, 0, 1, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 2, vs + int8(0, 0, 1, 0, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 2, vs + int8(0, 0, 1, 0, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(0, 0, 1, 0, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 3, vs + int8(0, 0, 1, 1, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 3, vs + int8(0, 0, 1, 1, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(0, 0, 1, 1, v4, 0, 0, 0)),
 
-      terGenCacheHelp(g, inds->s + 4, vs + int8(0, 1, 0, 0, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 4, vs + int8(0, 1, 0, 0, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(0, 1, 0, 0, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 5, vs + int8(0, 1, 0, 1, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 5, vs + int8(0, 1, 0, 1, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(0, 1, 0, 1, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 6, vs + int8(0, 1, 1, 0, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 6, vs + int8(0, 1, 1, 0, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(0, 1, 1, 0, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 7, vs + int8(0, 1, 1, 1, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 7, vs + int8(0, 1, 1, 1, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(0, 1, 1, 1, v4, 0, 0, 0)),
 
-      terGenCacheHelp(g, inds->s + 8, vs + int8(1, 0, 0, 0, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 8, vs + int8(1, 0, 0, 0, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(1, 0, 0, 0, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 9, vs + int8(1, 0, 0, 1, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 9, vs + int8(1, 0, 0, 1, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(1, 0, 0, 1, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 10, vs + int8(1, 0, 1, 0, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 10, vs + int8(1, 0, 1, 0, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(1, 0, 1, 0, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 11, vs + int8(1, 0, 1, 1, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 11, vs + int8(1, 0, 1, 1, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(1, 0, 1, 1, v4, 0, 0, 0)),
 
-      terGenCacheHelp(g, inds->s + 12, vs + int8(1, 1, 0, 0, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 12, vs + int8(1, 1, 0, 0, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(1, 1, 0, 0, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 13, vs + int8(1, 1, 0, 1, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 13, vs + int8(1, 1, 0, 1, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(1, 1, 0, 1, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 14, vs + int8(1, 1, 1, 0, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 14, vs + int8(1, 1, 1, 0, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE * float8(1, 1, 1, 0, v4, 0, 0, 0)),
-      terGenCacheHelp(g, inds->s + 15, vs + int8(1, 1, 1, 1, v4, 0, 0, 0),
+      terGenCacheHelp(g, i->s + 15, vs + int8(1, 1, 1, 1, v4, 0, 0, 0),
                       v + TERGEN_CACHE_SCALE *
                               float8(1, 1, 1, 1, v4, 0, 0, 0)));
 }
@@ -218,6 +219,6 @@ ushort generateTerrain(TerrainGenerator *g, int8 v) {
   float16 hi = terGenCacheHelp16(inds->s + 16, g->tc2, &g->td2, vs, 1, vf);
   float fl = superLerp(lo, hi, l0, l1);
 
-  return 0xFFFFU * (fl > 0.3);
+  return 0x7FFFU * (fl > 0.3);
 }
 

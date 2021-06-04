@@ -7,7 +7,8 @@ typedef struct Line {
 
 float sigV(float in) { return in >= 0 ? 1.000001 : -0.000001; }
 
-void followLine(const Line *line, FacesCacher *f, float dist1, float dist2) {
+void followLine(const Line *line, FacesCacher *f, TerrainGenerator *g,
+                float dist1, float dist2) {
   if (line->a3.s2 > dist2 || line->b3.s2 < dist1) {
     return;
   }
@@ -29,6 +30,9 @@ void followLine(const Line *line, FacesCacher *f, float dist1, float dist2) {
     b3 -= df3 * offset;
   }
 
+  uchar d1 = line->d1;
+  uchar d2 = line->d2;
+
   int8 ci = fastFloor5(a);
   float8 invdf = 1 / df;
   float8 sigdf1 = float8(sigV(invdf.s0), sigV(invdf.s1), sigV(invdf.s2),
@@ -45,8 +49,16 @@ void followLine(const Line *line, FacesCacher *f, float dist1, float dist2) {
     dist += ndist + 1e-6;
     if (dist >= 1) {
       float3 tmp = a3 + df3 * dist;
-      // TODO: LOOKS LIKE WE STILL NEED SOMETHING LIKE addEdge
+      addEdge(f, g, ci, d1, d2, pos3, tmp);
+      break;
     }
+    if (ndist >= 1e-6) {
+      float3 tmp = a3 + df3 * dist;
+      addEdge(f, g, ci, d1, d2, pos3, tmp);
+      pos3 = tmp;
+    }
+    pos = a + df * dist;
+    ci = fastFloor5(pos);
   }
 }
 
