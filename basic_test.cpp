@@ -6,8 +6,6 @@
 #define GLAD_GL_IMPLEMENTATION
 #include "gl_program.hpp"
 
-#include "terrain_generator_perlin.hpp"
-#include "terrain_generator_tester.hpp"
 #include "terrain_renderer.hpp"
 
 namespace {
@@ -45,6 +43,19 @@ std::unique_ptr<double[]> getGradVecs(std::size_t numGradVecs,
   return gradVecs;
 }
 
+std::unique_ptr<cl_float8[]> convertGradVecs(double *g,
+                                             std::size_t numGradVecs) {
+  std::unique_ptr<cl_float8[]> toret(new cl_float8[numGradVecs]);
+  for (std::size_t i = 0; i < numGradVecs; i++) {
+    toret[i].s[0] = g[i * 5 + 0];
+    toret[i].s[1] = g[i * 5 + 1];
+    toret[i].s[2] = g[i * 5 + 2];
+    toret[i].s[3] = g[i * 5 + 3];
+    toret[i].s[4] = g[i * 5 + 4];
+  }
+  return toret;
+}
+
 int main() {
   glfwSetErrorCallback(&errCallback);
   if (!glfwInit()) {
@@ -70,10 +81,10 @@ int main() {
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  // double pdists[] = {25, 23.91, 22.714, 21.375, 19.843, 18.028, 15.749, 12.5};
-  // double pdists[] = {25, 22.714, 19.843, 15.749};
-  // double pdists[] = {50, 47.82, 45.428, 42.75, 39.686, 36.056, 31.498, 25};
-  // double pdists[] = {50, 45.428, 39.686, 31.498};
+  // double pdists[] = {25, 23.91, 22.714, 21.375, 19.843, 18.028,
+  // 15.749, 12.5}; double pdists[] = {25, 22.714, 19.843, 15.749}; double
+  // pdists[] = {50, 47.82, 45.428, 42.75, 39.686, 36.056, 31.498, 25}; double
+  // pdists[] = {50, 45.428, 39.686, 31.498};
   double pdists[] = {25};
   double sq12 = std::sqrt(.5);
   /*
@@ -84,10 +95,10 @@ int main() {
                                  1,
                                  1};
   */
-  hypervoxel::SliceDirs<4> sd = {{0.1, 0.1, 0.1, 0.1},
-                                 {0, 0, sq12, -sq12},
-                                 {.5, .5, -.5, -.5},
-                                 {sq12, -sq12, 0, 0},
+  hypervoxel::SliceDirs<5> sd = {{0.1, 0.1, 0.1, 0.1, 0.1},
+                                 {0, 0, sq12, -sq12, 0},
+                                 {.5, .5, -.5, -.5, 0},
+                                 {sq12, -sq12, 0, 0, 0},
                                  1,
                                  1};
   /*
@@ -98,19 +109,15 @@ int main() {
                                  1,
                                  1};
   */
-  // hypervoxel::SliceDirs<3> sd = {{0.1, 0.1, -3.1}, {0, 0, 1}, {1, 0, 0}, {0,
-  // 1, 0}, 1, 1};
   std::size_t numGradVecs = 4096;
   unsigned seed = 2;
-  std::unique_ptr<double[]> gradVecs = getGradVecs(numGradVecs, 4, seed);
-  hypervoxel::TerrainRenderer<4, hypervoxel::TerrainGeneratorPerlin<4>>
-      renderer(
-          hypervoxel::TerrainGeneratorPerlin<4>{
-              {{32, 32, 32, 32}, gradVecs.get(), numGradVecs - 1, 3, 0.5}},
-          100000, 600000, 100000, 4, pdists, sd);
-  const std::size_t lenTriangles = 21 * 1048576;
+  hypervoxel::TerrainRenderer renderer(12900000, 1, 1, pdists[0]);
+  renderer.setPerlinOptions(
+      {512, 512, 512, 512, 512}, 4, 0.5,
+      convertGradVecs(getGradVecs(numGradVecs, 5, seed).get(), numGradVecs)
+          .get());
+  const std::size_t lenTriangles = 18 * 1048576;
   std::unique_ptr<float[]> triangles(new float[lenTriangles]);
-  float *triangles_end = triangles.get() + lenTriangles;
   GLProgram prog;
   prog.compileProgram(lenTriangles);
   prog.setProjMat(sd.width2, sd.height2, pdists[0] - 2);
@@ -125,7 +132,8 @@ int main() {
     // std::cout << "NEW FRAME" << std::endl << std::endl << std::endl <<
     // std::endl << std::endl;
 
-    float *tmpend = renderer.writeTriangles(sd, triangles.get(), triangles_end);
+    float *tmpend = renderer.generateTriangles(sd, pdists[0], 0, pdists[0],
+                                               triangles.get());
     prog.renderTriangles(triangles.get(), tmpend);
     sd.cam += 0.01;
     // sd.cam[3] -= 0.01;

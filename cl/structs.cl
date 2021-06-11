@@ -20,14 +20,14 @@ typedef struct FacesCacher {
   uint maxLen;
   volatile __global uint *len;
   __global FacesEntry *e;
-};
+} FacesCacher;
 
 /// c should be filled with 0xFF
-void initFacesCacher(FacesCacher *f, __global ushort2 *c, const SliceDirs *d,
-                     size_t maxSize, volatile __global uint *len,
-                     __global void *e) {
+void initFacesCacher(__global FacesCacher *f, __global ushort2 *c,
+                     const SliceDirs *d, size_t maxSize,
+                     volatile __global uint *len, __global void *e) {
   f->tc = c;
-  initTerrainCacher(&f->td, d, 1);
+  initTerrainIndexer(&f->td, d, 1);
   f->maxLen = maxSize / sizeof(FacesEntry) - 1;
   if (f->maxLen > 0xFFFF) {
     f->maxLen = 0xFFFF;
@@ -37,32 +37,30 @@ void initFacesCacher(FacesCacher *f, __global ushort2 *c, const SliceDirs *d,
   f->e = e;
 }
 
-__global ushort2 *getTerrainEntry(FacesCacher *f, int8 v) {
+__global ushort2 *getTerrainEntry(__global FacesCacher *f, int8 v) {
   return f->tc + getIndex(&f->td, v);
 }
 
-FacesEdge *getEdge(FacesCacher *f, int8 v, ushort color, uchar face, uchar d) {
+__global FacesEdge *getEdge(__global FacesCacher *f, int8 v, ushort color,
+                            uchar face, uchar d) {
   __global ushort2 *lp = getTerrainEntry(f, v);
   uint ind = lp->y;
-  FacesEntry *e;
+  __global FacesEntry *e;
   if (ind == 0xFFFF) {
     ind = atomic_add(f->len, 1);
-    if (ind >= maxLen) {
+    if (ind >= f->maxLen) {
       atomic_sub(f->len, 1);
-      return NULL;
+      return 0;
     }
     lp->y = ind;
-    e = &f->e[ind];
-    *(ulong2 *)&e = 0xFFFFFFFFFFFFFFFFU;
-    e->colors[4] = 0xFFFFU;
-  } else {
-    e = &f->e[ind];
   }
+  e = &f->e[ind];
   e->colors[face] = color;
   return &e->edges[face][d - (d > face) - (d > face + 5)];
 }
 
-ushort getTerrain(FacesCacher *f, TerrainGenerator *g, int8 v) {
+ushort getTerrain(__global FacesCacher *f, __global TerrainGenerator *g,
+                  int8 v) {
   __global ushort2 *lp = getTerrainEntry(f, v);
   ushort r = lp->x;
   if (r == 0xFFFFU) {
@@ -71,7 +69,7 @@ ushort getTerrain(FacesCacher *f, TerrainGenerator *g, int8 v) {
   return r;
 }
 
-bool addEdgeHelper(FacesEdge *ptr, FacesEdge toass) {
+bool addEdgeHelper(__global FacesEdge *ptr, FacesEdge toass) {
   if (!ptr) {
     return false;
   }
@@ -79,8 +77,8 @@ bool addEdgeHelper(FacesEdge *ptr, FacesEdge toass) {
   return true;
 }
 
-bool addEdge(FacesCacher *f, TerrainGenerator *g, int8 v, uchar d1, uchar d2,
-             float3 a, float3 b) {
+bool addEdge(__global FacesCacher *f, __global TerrainGenerator *g, int8 v,
+             uchar d1, uchar d2, float3 a, float3 b) {
   int mod1 = 1, mod2 = 1;
   Int8NoScam vns;
   vns.v = v;

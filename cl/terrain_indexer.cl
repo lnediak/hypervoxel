@@ -24,10 +24,11 @@ typedef union Float8NoScam {
   float s[8];
 } Float8NoScam;
 
-void initTerrainIndexer(TerrainIndexer *c, const SliceDirs *d, int sidel) {
-  float8 rmod = d->fm * d->rm * d->r;
-  float8 umod = d->fm * d->um * d->u;
-  float8 tmp = d->c + d->fm * d->f;
+void initTerrainIndexer(__global TerrainIndexer *d, const SliceDirs *sd,
+                        int sidel) {
+  float8 rmod = sd->fm * sd->rm * sd->r;
+  float8 umod = sd->fm * sd->um * sd->u;
+  float8 tmp = sd->c + sd->fm * sd->f;
   float8 tmpr = tmp + rmod;
   float8 tmpru = tmpr + umod;
   float8 tmprnu = tmpr - umod;
@@ -35,17 +36,17 @@ void initTerrainIndexer(TerrainIndexer *c, const SliceDirs *d, int sidel) {
   float8 tmpnru = tmpnr + umod;
   float8 tmpnrnu = tmpnr - umod;
   Int8NoScam lowest;
-  lowest.v =
-      getFloor8(min(d->c, min(tmpru, min(tmprnu, min(tmpnru, tmpnrnu)))) - 1e-4);
-  int8 higest =
-      getFloor8(max(d->c, max(tmpru, max(tmprnu, max(tmpnru, tmpnrnu)))) + 1.0001);
+  lowest.v = getFloor8(
+      min(sd->c, min(tmpru, min(tmprnu, min(tmpnru, tmpnrnu)))) - 1e-4f);
+  int8 highest = getFloor8(
+      max(sd->c, max(tmpru, max(tmprnu, max(tmpnru, tmpnrnu)))) + 1.0001f);
   Int8NoScam diffs;
   diffs.v = highest - lowest.v;
 
   Float8NoScam a, b, c;
-  a.v = d->r;
-  b.v = d->u;
-  c.v = d->f;
+  a.v = sd->r;
+  b.v = sd->u;
+  c.v = sd->f;
   size_t mDataS = 0x7FFFFFFF; /// lol OpenCL ain't got no SIZE_T_MAX lol
   const int N = 5;
   for (int d1 = 0; d1 < N - 2; d1++) {
@@ -58,17 +59,17 @@ void initTerrainIndexer(TerrainIndexer *c, const SliceDirs *d, int sidel) {
           continue;
         }
         // columns of the inverse matrix
-        float3 c1 = float3(b.s[d2] * c.s[d3] - b.s[d3] * c.s[d2],
-                           a.s[d3] * c.s[d2] - a.s[d2] * c.s[d3],
-                           a.s[d2] * b.s[d3] - a.s[d3] * b.s[d2]) /
+        float3 c1 = (float3)(b.s[d2] * c.s[d3] - b.s[d3] * c.s[d2],
+                             a.s[d3] * c.s[d2] - a.s[d2] * c.s[d3],
+                             a.s[d2] * b.s[d3] - a.s[d3] * b.s[d2]) /
                     det;
-        float3 c2 = float3(b.s[d1] * c.s[d3] - b.s[d3] * c.s[d1],
-                           a.s[d3] * c.s[d1] - a.s[d1] * c.s[d3],
-                           a.s[d1] * b.s[d3] - a.s[d3] * b.s[d1]) /
+        float3 c2 = (float3)(b.s[d1] * c.s[d3] - b.s[d3] * c.s[d1],
+                             a.s[d3] * c.s[d1] - a.s[d1] * c.s[d3],
+                             a.s[d1] * b.s[d3] - a.s[d3] * b.s[d1]) /
                     det;
-        float3 c3 = float3(b.s[d1] * c.s[d2] - b.s[d2] * c.s[d1],
-                           a.s[d2] * c.s[d1] - a.s[d1] * c.s[d2],
-                           a.s[d1] * b.s[d2] - a.s[d2] * b.s[d1]) /
+        float3 c3 = (float3)(b.s[d1] * c.s[d2] - b.s[d2] * c.s[d1],
+                             a.s[d2] * c.s[d1] - a.s[d1] * c.s[d2],
+                             a.s[d1] * b.s[d2] - a.s[d2] * b.s[d1]) /
                     det;
 
         int d4 = 0;
@@ -84,56 +85,58 @@ void initTerrainIndexer(TerrainIndexer *c, const SliceDirs *d, int sidel) {
           }
         }
         // rows of a 2x3 matrix product
-        float3 m4 = float3(a.s[d4] * c1.s0 + b.s[d4] * c1.s1 + c.s[d4] * c1.s2,
-                           a.s[d4] * c2.s0 + b.s[d4] * c2.s1 + c.s[d4] * c2.s2,
-                           a.s[d4] * c3.s0 + b.s[d4] * c3.s1 + c.s[d4] * c3.s2);
-        float3 m5 = float3(a.s[d5] * c1.s0 + b.s[d5] * c1.s1 + c.s[d5] * c1.s2,
-                           a.s[d5] * c2.s0 + b.s[d5] * c2.s1 + c.s[d5] * c2.s2,
-                           a.s[d5] * c3.s0 + b.s[d5] * c3.s1 + c.s[d5] * c3.s2);
-        size_t w4 =
-            getFloor(sidel * (abs(m4.s0) + abs(m4.s1) + abs(m4.s2)) + 1.00001);
-        size_t w5 =
-            getFloor(sidel * (abs(m5.s0) + abs(m5.s1) + abs(m5.s2)) + 1.00001);
+        float3 m4 =
+            (float3)(a.s[d4] * c1.s0 + b.s[d4] * c1.s1 + c.s[d4] * c1.s2,
+                     a.s[d4] * c2.s0 + b.s[d4] * c2.s1 + c.s[d4] * c2.s2,
+                     a.s[d4] * c3.s0 + b.s[d4] * c3.s1 + c.s[d4] * c3.s2);
+        float3 m5 =
+            (float3)(a.s[d5] * c1.s0 + b.s[d5] * c1.s1 + c.s[d5] * c1.s2,
+                     a.s[d5] * c2.s0 + b.s[d5] * c2.s1 + c.s[d5] * c2.s2,
+                     a.s[d5] * c3.s0 + b.s[d5] * c3.s1 + c.s[d5] * c3.s2);
+        size_t w4 = getFloor(sidel * (fabs(m4.s0) + fabs(m4.s1) + fabs(m4.s2)) +
+                             1.00001);
+        size_t w5 = getFloor(sidel * (fabs(m5.s0) + fabs(m5.s1) + fabs(m5.s2)) +
+                             1.00001);
         size_t wz = diffs.s[d3];
         size_t wy = diffs.s[d2];
         size_t wx = diffs.s[d1];
         size_t tmp = wx * wy * wz * w4 * w5;
         if (tmp < mDataS) {
           mDataS = tmp;
-          c->d1 = d1;
-          c->d2 = d2;
-          c->d3 = d3;
-          c->d4 = d4;
-          c->d5 = d5;
-          c->m4 = m4;
-          c->m5 = m5;
+          d->d1 = d1;
+          d->d2 = d2;
+          d->d3 = d3;
+          d->d4 = d4;
+          d->d5 = d5;
+          d->m4 = m4;
+          d->m5 = m5;
 
-          c->cs = int3(lowest.s[d1], lowest.s[d2], lowest.s[d3]);
-          c->s4 = w5;
-          c->zs = w4 * w5;
-          c->ys = wz * d->zs;
-          c->xs = wy * d->ys;
+          d->cs = (int3)(lowest.s[d1], lowest.s[d2], lowest.s[d3]);
+          d->s4 = w5;
+          d->zs = w4 * w5;
+          d->ys = wz * d->zs;
+          d->xs = wy * d->ys;
         }
       }
     }
   }
 
   Float8NoScam cam;
-  cam.v = c->c = d->c;
+  cam.v = d->c = sd->c;
 
-  c->o4 = cam.s[c->d4];
-  c->o5 = cam.s[c->d5];
+  d->o4 = cam.s[d->d4];
+  d->o5 = cam.s[d->d5];
 
-  float3 defBase = float3(cam.s[c->d1], cam.s[c->d2], cam.s[c->d3]);
-  c->b4 = defBase - sidel * float3(c->m4.s0 < 0, c->m4.s1 < 0, c->m4.s2 < 0);
-  c->b5 = defBase - sidel * float3(c->m5.s0 < 0, c->m5.s1 < 0, c->m5.s2 < 0);
+  float3 defBase = (float3)(cam.s[d->d1], cam.s[d->d2], cam.s[d->d3]);
+  d->b4 = defBase - sidel * (float3)(d->m4.s0 < 0, d->m4.s1 < 0, d->m4.s2 < 0);
+  d->b5 = defBase - sidel * (float3)(d->m5.s0 < 0, d->m5.s1 < 0, d->m5.s2 < 0);
 }
 
 /// 5 dimensions lol
-size_t getIndex(const TerrainIndexer *d, int8 v) {
+size_t getIndex(const __global TerrainIndexer *d, int8 v) {
   Int8NoScam vv;
   vv.v = v;
-  float3 vf = float3(vv.s[d->d1], vv.s[d->d2], vv.s[d->d3]);
+  float3 vf = (float3)(vv.s[d->d1], vv.s[d->d2], vv.s[d->d3]);
   float3 vf4 = vf - d->b4;
   int v4c = getHarshFloor(dot(vf - d->b4, d->m4) + d->o4);
   float3 vf5 = vf - d->b5;

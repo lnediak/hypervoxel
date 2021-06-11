@@ -7,8 +7,8 @@
 
 namespace hypervoxel {
 
-template <std::size_t N>
-inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
+template <std::size_t N, class LineW>
+inline void getLines(const SliceDirs<N> &sd, double dist, LineW &lineWriter) {
   constexpr double maxDiag = std::sqrt(N);
   double roff, uoff, foff;
   if (sd.width2 > sd.height2) {
@@ -83,9 +83,10 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
         if (l.min[dim1] <= plane1 && plane1 < l.max[dim1]) {
           itions1[itionc1].isReal = true;
           itions1[itionc1].linei = j;
-          double offset = l.max[dim1] - l.min[dim1] >= 1e-8
-                              ? (plane1 - l.p1[dim1]) / (l.p2[dim1] - l.p1[dim1])
-                              : 0.5; // error shouldn't be noticable
+          double offset =
+              l.max[dim1] - l.min[dim1] >= 1e-8
+                  ? (plane1 - l.p1[dim1]) / (l.p2[dim1] - l.p1[dim1])
+                  : 0.5; // error shouldn't be noticable
           itions1[itionc1].p = l.p1 + (l.p2 - l.p1) * offset;
           itions1[itionc1].p3 = l.p13 + (l.p23 - l.p13) * offset;
           itions1[itionc1++].p[dim1] = plane1;
@@ -147,25 +148,25 @@ inline Line<N> *getLines(const SliceDirs<N> &sd, double dist, Line<N> *lines) {
           if (!itionc2) {
             break;
           }
-          lines->dim1 = dim1;
-          lines->dim2 = dim2;
+          Line<N> line;
+          line.dim1 = dim1;
+          line.dim2 = dim2;
           if (itions2[0].p3[2] < itions2[1].p3[2]) {
-            lines->a = itions2[0].p;
-            lines->a3 = itions2[0].p3;
-            lines->b = itions2[1].p;
-            lines->b3 = itions2[1].p3;
+            line.a = itions2[0].p;
+            line.a3 = itions2[0].p3;
+            line.b = itions2[1].p;
+            line.b3 = itions2[1].p3;
           } else {
-            lines->a = itions2[1].p;
-            lines->a3 = itions2[1].p3;
-            lines->b = itions2[0].p;
-            lines->b3 = itions2[0].p3;
+            line.a = itions2[1].p;
+            line.a3 = itions2[1].p3;
+            line.b = itions2[0].p;
+            line.b3 = itions2[0].p3;
           }
-          lines++;
+          lineWriter(line);
         }
       }
     }
   }
-  return lines;
 }
 
 } // namespace hypervoxel
