@@ -26,6 +26,13 @@ typedef union Float8NoScam {
 
 void initTerrainIndexer(__global TerrainIndexer *d, const SliceDirs *sd,
                         int sidel) {
+  printf("r: %f, %f, %f, %f, %f\n", sd->r.s0, sd->r.s1, sd->r.s2, sd->r.s3,
+         sd->r.s4);
+  printf("u: %f, %f, %f, %f, %f\n", sd->u.s0, sd->u.s1, sd->u.s2, sd->u.s3,
+         sd->u.s4);
+  printf("f: %f, %f, %f, %f, %f\n", sd->f.s0, sd->f.s1, sd->f.s2, sd->f.s3,
+         sd->f.s4);
+
   float8 rmod = sd->fm * sd->rm * sd->r;
   float8 umod = sd->fm * sd->um * sd->u;
   float8 tmp = sd->c + sd->fm * sd->f;
@@ -47,7 +54,7 @@ void initTerrainIndexer(__global TerrainIndexer *d, const SliceDirs *sd,
   a.v = sd->r;
   b.v = sd->u;
   c.v = sd->f;
-  size_t mDataS = 0x7FFFFFFF; /// lol OpenCL ain't got no SIZE_T_MAX lol
+  size_t mDataS = -1; // basically SIZE_T_MAX
   const int N = 5;
   for (int d1 = 0; d1 < N - 2; d1++) {
     for (int d2 = d1 + 1; d2 < N - 1; d2++) {
@@ -58,14 +65,15 @@ void initTerrainIndexer(__global TerrainIndexer *d, const SliceDirs *sd,
         if (-1e-4 < det && det < 1e-4) {
           continue;
         }
+        printf("d1, d2, d3: det: %i, %i, %i: %f\n", d1, d2, d3, det);
         // columns of the inverse matrix
         float3 c1 = (float3)(b.s[d2] * c.s[d3] - b.s[d3] * c.s[d2],
                              a.s[d3] * c.s[d2] - a.s[d2] * c.s[d3],
                              a.s[d2] * b.s[d3] - a.s[d3] * b.s[d2]) /
                     det;
-        float3 c2 = (float3)(b.s[d1] * c.s[d3] - b.s[d3] * c.s[d1],
-                             a.s[d3] * c.s[d1] - a.s[d1] * c.s[d3],
-                             a.s[d1] * b.s[d3] - a.s[d3] * b.s[d1]) /
+        float3 c2 = (float3)(b.s[d3] * c.s[d1] - b.s[d1] * c.s[d3],
+                             a.s[d1] * c.s[d3] - a.s[d3] * c.s[d1],
+                             a.s[d3] * b.s[d1] - a.s[d1] * b.s[d3]) /
                     det;
         float3 c3 = (float3)(b.s[d1] * c.s[d2] - b.s[d2] * c.s[d1],
                              a.s[d2] * c.s[d1] - a.s[d1] * c.s[d2],
@@ -101,6 +109,14 @@ void initTerrainIndexer(__global TerrainIndexer *d, const SliceDirs *sd,
         size_t wy = diffs.s[d2];
         size_t wx = diffs.s[d1];
         size_t tmp = wx * wy * wz * w4 * w5;
+
+        printf("c1; c2; c3: %f, %f, %f; %f, %f, %f; %f, %f, %f\n", c1.x, c1.y,
+               c1.z, c2.x, c2.y, c2.z, c3.x, c3.y, c3.z);
+        printf("m4; m5: %f, %f, %f; %f, %f, %f\n", m4.x, m4.y, m4.z, m5.x, m5.y,
+               m5.z);
+        printf("wx, wy, wz, w4, w5, tmp: %i, %i, %i, %i, %i, %i\n", (int)wx,
+               (int)wy, (int)wz, (int)w4, (int)w5, (int)tmp);
+
         if (tmp < mDataS) {
           mDataS = tmp;
           d->d1 = d1;
@@ -130,6 +146,7 @@ void initTerrainIndexer(__global TerrainIndexer *d, const SliceDirs *sd,
   float3 defBase = (float3)(cam.s[d->d1], cam.s[d->d2], cam.s[d->d3]);
   d->b4 = defBase - sidel * (float3)(d->m4.s0 < 0, d->m4.s1 < 0, d->m4.s2 < 0);
   d->b5 = defBase - sidel * (float3)(d->m5.s0 < 0, d->m5.s1 < 0, d->m5.s2 < 0);
+  printf("d1, d2, d3: %i, %i, %i\n", (int)d->d1, (int)d->d2, (int)d->d3);
 }
 
 /// 5 dimensions lol
@@ -141,8 +158,23 @@ size_t getIndex(const __global TerrainIndexer *d, int8 v) {
   int v4c = getHarshFloor(dot(vf - d->b4, d->m4) + d->o4);
   float3 vf5 = vf - d->b5;
   int v5c = getHarshFloor(dot(vf - d->b5, d->m5) + d->o5);
-  return (vv.s[d->d1] - d->cs.s0) * d->xs + (vv.s[d->d2] - d->cs.s1) * d->ys +
-         (vv.s[d->d3] - d->cs.s2) * d->zs + (vv.s[d->d4] - v4c) * d->s4 +
-         (vv.s[d->d5] - v5c);
+  int kek = (vv.s[d->d1] - d->cs.s0) * d->xs +
+            (vv.s[d->d2] - d->cs.s1) * d->ys +
+            (vv.s[d->d3] - d->cs.s2) * d->zs + (vv.s[d->d4] - v4c) * d->s4 +
+            (vv.s[d->d5] - v5c);
+
+  // FIXME: DEBUG SHIT
+  if (kek < 0) {
+    printf("TerrainIndexer: d1, d2, d3: %i, %i, %i\n", (int)(d->d1),
+           (int)(d->d2), (int)(d->d3));
+    printf("v: %i, %i, %i, %i, %i\n", v.s0, v.s1, v.s2, v.s3, v.s4);
+    printf("d->cs: %i, %i, %i\n", d->cs.s0, d->cs.s1, d->cs.s2);
+    printf("pre-v4c, pre-v5c: %f, %f\n", dot(vf - d->b4, d->m4) + d->o4, dot(vf - d->b5, d->m5) + d->o5);
+    printf("v4c, v5c: %i, %i\n", v4c, v5c);
+    printf("getIndex of %i, %i, %i, %i, %i: %i\n", v.s0, v.s1, v.s2, v.s3, v.s4,
+           kek);
+  }
+
+  return kek;
 }
 

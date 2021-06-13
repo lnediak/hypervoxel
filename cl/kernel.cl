@@ -47,7 +47,7 @@ __kernel void initGlobalsForMain(__global FacesCacher *f,
   d.c = (float8)(fs[0], fs[1], fs[2], fs[3], fs[4], 0, 0, 0);
   d.r = (float8)(fs[5], fs[6], fs[7], fs[8], fs[9], 0, 0, 0);
   d.u = (float8)(fs[10], fs[11], fs[12], fs[13], fs[14], 0, 0, 0);
-  d.r = (float8)(fs[15], fs[16], fs[17], fs[18], fs[19], 0, 0, 0);
+  d.f = (float8)(fs[15], fs[16], fs[17], fs[18], fs[19], 0, 0, 0);
   d.fm = fs[20];
   d.rm = fs[21];
   d.um = fs[22];

@@ -29,7 +29,7 @@ void initTerrainGenerator(__global TerrainGenerator *g, __global UInt32 *c1,
                           PerlinOptions o) {
   g->tc1 = c1;
   g->tc2 = c2;
-  SliceDirs dl;
+  SliceDirs dl = *d;
   dl.c = d->c / TERGEN_CACHE_SCALE;
   dl.fm = d->fm / TERGEN_CACHE_SCALE;
   initTerrainIndexer(&g->td1, &dl, 1);

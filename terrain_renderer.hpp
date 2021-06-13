@@ -14,6 +14,8 @@ namespace hypervoxel {
 
 class TerrainRenderer {
 
+  double rm, um, fm;
+
   cl::Platform plat;
   cl::Device devi;
   cl::Context cont;
@@ -42,7 +44,7 @@ class TerrainRenderer {
 
 public:
   TerrainRenderer(cl_uint sz, double rm, double um, double fm)
-      : prog(""), sz(sz) {
+      : rm(rm), um(um), fm(fm), prog(""), sz(sz) {
     try {
       bool found = false;
       cl::vector<cl::Platform> platforms;
@@ -161,9 +163,24 @@ public:
     queu.enqueueWriteBuffer(o, CL_TRUE, 0, 4097 * sizeof(cl_float8), ob);
   }
 
-  float *generateTriangles(const SliceDirs<5> &d, double fm, double d1,
-                           double d2, float *out) {
+  float *generateTriangles(const SliceDirs<5> &d, double d1, double d2,
+                           float *out) {
     try {
+      cl_float fsf[23] = {
+          (cl_float)d.cam[0],     (cl_float)d.cam[1],
+          (cl_float)d.cam[2],     (cl_float)d.cam[3],
+          (cl_float)d.cam[4],     (cl_float)d.right[0],
+          (cl_float)d.right[1],   (cl_float)d.right[2],
+          (cl_float)d.right[3],   (cl_float)d.right[4],
+          (cl_float)d.up[0],      (cl_float)d.up[1],
+          (cl_float)d.up[2],      (cl_float)d.up[3],
+          (cl_float)d.up[4],      (cl_float)d.forward[0],
+          (cl_float)d.forward[1], (cl_float)d.forward[2],
+          (cl_float)d.forward[3], (cl_float)d.forward[4],
+          (cl_float)fm,           (cl_float)rm,
+          (cl_float)um,
+      };
+      queu.enqueueWriteBuffer(fs, CL_FALSE, 0, 23 * sizeof(cl_float), fsf);
       struct LineWriter {
 
         cl_float *out;

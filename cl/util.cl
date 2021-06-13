@@ -49,7 +49,7 @@ float8 int52float5(int8 val) {
 
 /// designed to overshoot the floor on borderline values
 int getHarshFloor(float val) {
-  val -= 0.500001;
+  val -= 0.50001;
   val += 8388608 * 1.5;
   return ((short *)&val)[GETFLOOR_ENDIANESS_INDEX];
 }

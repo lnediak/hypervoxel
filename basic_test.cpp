@@ -85,7 +85,7 @@ int main() {
   // 15.749, 12.5}; double pdists[] = {25, 22.714, 19.843, 15.749}; double
   // pdists[] = {50, 47.82, 45.428, 42.75, 39.686, 36.056, 31.498, 25}; double
   // pdists[] = {50, 45.428, 39.686, 31.498};
-  double pdists[] = {25};
+  double pdists[] = {5};
   double sq12 = std::sqrt(.5);
   /*
   hypervoxel::SliceDirs<5> sd = {{0.1, 0.1, 0.1, 0.1, 0.1},
@@ -132,8 +132,8 @@ int main() {
     // std::cout << "NEW FRAME" << std::endl << std::endl << std::endl <<
     // std::endl << std::endl;
 
-    float *tmpend = renderer.generateTriangles(sd, pdists[0], 0, pdists[0],
-                                               triangles.get());
+    float *tmpend =
+        renderer.generateTriangles(sd, 0, pdists[0], triangles.get());
     prog.renderTriangles(triangles.get(), tmpend);
     sd.cam += 0.01;
     // sd.cam[3] -= 0.01;
