@@ -44,9 +44,9 @@ void initTerrainIndexer(__global TerrainIndexer *d, const SliceDirs *sd,
   float8 tmpnrnu = tmpnr - umod;
   Int8NoScam lowest;
   lowest.v = getFloor8(
-      min(sd->c, min(tmpru, min(tmprnu, min(tmpnru, tmpnrnu)))) - 1e-4f);
+      min(sd->c, min(tmpru, min(tmprnu, min(tmpnru, tmpnrnu)))) - 1e-3f);
   int8 highest = getFloor8(
-      max(sd->c, max(tmpru, max(tmprnu, max(tmpnru, tmpnrnu)))) + 1.0001f);
+      max(sd->c, max(tmpru, max(tmprnu, max(tmpnru, tmpnrnu)))) + 1.001f);
   Int8NoScam diffs;
   diffs.v = highest - lowest.v;
 
@@ -102,9 +102,9 @@ void initTerrainIndexer(__global TerrainIndexer *d, const SliceDirs *sd,
                      a.s[d5] * c2.s0 + b.s[d5] * c2.s1 + c.s[d5] * c2.s2,
                      a.s[d5] * c3.s0 + b.s[d5] * c3.s1 + c.s[d5] * c3.s2);
         size_t w4 = getFloor(sidel * (fabs(m4.s0) + fabs(m4.s1) + fabs(m4.s2)) +
-                             1.00001);
+                             1.0001);
         size_t w5 = getFloor(sidel * (fabs(m5.s0) + fabs(m5.s1) + fabs(m5.s2)) +
-                             1.00001);
+                             1.0001);
         size_t wz = diffs.s[d3];
         size_t wy = diffs.s[d2];
         size_t wx = diffs.s[d1];
@@ -169,7 +169,8 @@ size_t getIndex(const __global TerrainIndexer *d, int8 v) {
            (int)(d->d2), (int)(d->d3));
     printf("v: %i, %i, %i, %i, %i\n", v.s0, v.s1, v.s2, v.s3, v.s4);
     printf("d->cs: %i, %i, %i\n", d->cs.s0, d->cs.s1, d->cs.s2);
-    printf("pre-v4c, pre-v5c: %f, %f\n", dot(vf - d->b4, d->m4) + d->o4, dot(vf - d->b5, d->m5) + d->o5);
+    printf("pre-v4c, pre-v5c: %f, %f\n", dot(vf - d->b4, d->m4) + d->o4,
+           dot(vf - d->b5, d->m5) + d->o5);
     printf("v4c, v5c: %i, %i\n", v4c, v5c);
     printf("getIndex of %i, %i, %i, %i, %i: %i\n", v.s0, v.s1, v.s2, v.s3, v.s4,
            kek);

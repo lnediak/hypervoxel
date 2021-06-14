@@ -166,21 +166,7 @@ public:
   float *generateTriangles(const SliceDirs<5> &d, double d1, double d2,
                            float *out) {
     try {
-      cl_float fsf[23] = {
-          (cl_float)d.cam[0],     (cl_float)d.cam[1],
-          (cl_float)d.cam[2],     (cl_float)d.cam[3],
-          (cl_float)d.cam[4],     (cl_float)d.right[0],
-          (cl_float)d.right[1],   (cl_float)d.right[2],
-          (cl_float)d.right[3],   (cl_float)d.right[4],
-          (cl_float)d.up[0],      (cl_float)d.up[1],
-          (cl_float)d.up[2],      (cl_float)d.up[3],
-          (cl_float)d.up[4],      (cl_float)d.forward[0],
-          (cl_float)d.forward[1], (cl_float)d.forward[2],
-          (cl_float)d.forward[3], (cl_float)d.forward[4],
-          (cl_float)fm,           (cl_float)rm,
-          (cl_float)um,
-      };
-      queu.enqueueWriteBuffer(fs, CL_FALSE, 0, 23 * sizeof(cl_float), fsf);
+      SliceDirs<5> sd = d;
       struct LineWriter {
 
         cl_float *out;
@@ -213,10 +199,37 @@ public:
           *out++ = weird;
         }
       } lineWriter{lineshp.get()};
-      getLines(d, fm, lineWriter);
+      double dist = fm;
+      getLines(sd, dist, lineWriter);
       unsigned df = lineWriter.out - lineshp.get();
       queu.enqueueWriteBuffer(lines, CL_FALSE, 0, df * sizeof(cl_float),
                               lineshp.get());
+      cl_float fsf[23] = {
+          (cl_float)sd.cam[0],
+          (cl_float)sd.cam[1],
+          (cl_float)sd.cam[2],
+          (cl_float)sd.cam[3],
+          (cl_float)sd.cam[4],
+          (cl_float)sd.right[0],
+          (cl_float)sd.right[1],
+          (cl_float)sd.right[2],
+          (cl_float)sd.right[3],
+          (cl_float)sd.right[4],
+          (cl_float)sd.up[0],
+          (cl_float)sd.up[1],
+          (cl_float)sd.up[2],
+          (cl_float)sd.up[3],
+          (cl_float)sd.up[4],
+          (cl_float)sd.forward[0],
+          (cl_float)sd.forward[1],
+          (cl_float)sd.forward[2],
+          (cl_float)sd.forward[3],
+          (cl_float)sd.forward[4],
+          (cl_float)fm,
+          (cl_float)rm,
+          (cl_float)um,
+      };
+      queu.enqueueWriteBuffer(fs, CL_FALSE, 0, 23 * sizeof(cl_float), fsf);
 
       clearBuf.setArg(0, us2s);
       queu.enqueueNDRangeKernel(clearBuf, cl::NullRange, cl::NDRange(us2ssz));

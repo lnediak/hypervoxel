@@ -8,7 +8,7 @@
 namespace hypervoxel {
 
 template <std::size_t N, class LineW>
-inline void getLines(const SliceDirs<N> &sd, double dist, LineW &lineWriter) {
+inline void getLines(SliceDirs<N> &sd, double& dist, LineW &lineWriter) {
   constexpr double maxDiag = std::sqrt(N);
   double roff, uoff, foff;
   if (sd.width2 > sd.height2) {
@@ -27,7 +27,7 @@ inline void getLines(const SliceDirs<N> &sd, double dist, LineW &lineWriter) {
   v::DVec<N> vright = sd.right * roff;
   v::DVec<N> vup = sd.up * uoff;
 
-  v::DVec<N> p1 = vcam - sd.forward * foff;
+  v::DVec<N> p1 = sd.cam -= sd.forward * foff;
   v::DVec<N> p2 = vcam + vfor - vright - vup;
   v::DVec<N> p3 = vcam + vfor - vright + vup;
   v::DVec<N> p4 = vcam + vfor + vright + vup;
@@ -37,6 +37,7 @@ inline void getLines(const SliceDirs<N> &sd, double dist, LineW &lineWriter) {
   v::DVec<3> p33 = {-roff, +uoff, dist};
   v::DVec<3> p43 = {+roff, +uoff, dist};
   v::DVec<3> p53 = {+roff, -uoff, dist};
+  dist += foff;
   struct LineRange {
     v::DVec<N> p1, p2;
     v::DVec<N> min, max;
