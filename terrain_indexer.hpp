@@ -1,3 +1,4 @@
+#include <cmath>
 #include <iostream>
 
 #include "util.hpp"
@@ -12,7 +13,6 @@ class TerrainIndexer {
   v::FVec<3> m4, m5;
   v::FVec<3> b4, b5;
   double o4, o5;
-  v::FVec<5> c;
 
   v::IVec<3> cs;
   std::size_t xs, ys, zs;
@@ -20,44 +20,141 @@ class TerrainIndexer {
 
   std::size_t size;
 
+  static float safeAbsR(float a, float b) {
+    if (a == 0 && b == 0) {
+      return 0;
+    }
+    return std::abs(a / b);
+  }
+
+  /// minimizing c1x+c2y+c3z under:
+  /// z>=0,-rm<=x/z<=rm,-um<=y/z<=um,x^2+y^2+z^2<=fm^2
+  static float optimize(float c1, float c2, float c3, float rm, float um,
+                        float fm) {
+    float curMin = INFINITY;
+    // applying lagrange multipliers:
+    // 2lx=c1,2ly=c2,2lz=c3,x^2+y^2+z^2=fm^2
+    // r=1/2l implies obj=r(c1^2+c2^2+c3^2)
+    // while fm^2=x^2+y^2+z^2=r^2(c1^2+c2^2+c3^2)
+    float nor = c1 * c1 + c2 * c2 + c3 * c3;
+    float fm2 = fm * fm;
+    float fatr = -std::sqrt(fm2 / nor);
+    /* std::cout << "x,y,z(sphere): " << fatr * c1 << " " << fatr * c2 << " "
+              << fatr * c3 << std::endl; */
+    if (c3 * fatr >= 0 && safeAbsR(c1, c3) <= rm && safeAbsR(c2, c3) <= um) {
+      curMin = fatr * nor;
+    }
+
+    // great circles: x=-zrm,x=zrm,y=-zum,y=zum
+    // take a given circle, say x=zrm. then
+    // it can be written in just y and z.
+    // obj=c1rmz+c2y+c3z, so z's coef is cz=(c1rm+c3).
+    // x^2+y^2+z^2=y^2+z^2(1+rm^2)=fm^2.
+    // let z0=z(1+rm^2)^0.5. cz0=cz/(1+rm^2)^0.5.
+    // applying lagrange multipliers:
+    // 2ly=c2,2lz0=cz0,y^2+z0^2=fm^2
+    // r=1/2l implies obj=r(c2^2+cz0^2)
+    // while fm^2=y^2+z0^2=r^2(c2^2+cz0^2)
+    float rm12 = 1 + rm * rm;
+    float cz = c3 + c1 * rm;
+    nor = c2 * c2 + cz * cz / rm12;
+    fatr = -std::sqrt(fm2 / nor);
+    float c3mod = cz / rm12;
+    /* std::cout << "x,y,z(great circle): " << fatr * c3mod / rm << " "
+              << fatr * c2 << " " << fatr * c3mod << std::endl; */
+    if (cz * fatr >= 0 && safeAbsR(c2, c3mod) <= um) {
+      curMin = std::min(curMin, fatr * nor);
+    }
+    cz = c3 - c1 * rm;
+    nor = c2 * c2 + cz * cz / rm12;
+    fatr = -std::sqrt(fm2 / nor);
+    c3mod = cz / rm12;
+    /* std::cout << "x,y,z(great circle): " << fatr * c3mod / rm << " "
+              << fatr * c2 << " " << fatr * c3mod << std::endl; */
+    if (cz * fatr >= 0 && safeAbsR(c2, c3mod) <= um) {
+      curMin = std::min(curMin, fatr * nor);
+    }
+    float um12 = 1 + um * um;
+    cz = c3 + c2 * um;
+    nor = c1 * c1 + cz * cz / um12;
+    fatr = -std::sqrt(fm2 / nor);
+    c3mod = cz / um12;
+    /* std::cout << "x,y,z(great circle): " << fatr * c1 << " "
+              << fatr * c3mod / um << " " << fatr * c3mod << std::endl; */
+    if (cz * fatr >= 0 && safeAbsR(c1, c3mod) <= rm) {
+      curMin = std::min(curMin, fatr * nor);
+    }
+    cz = c3 - c2 * um;
+    nor = c1 * c1 + cz * cz / um12;
+    fatr = -std::sqrt(fm2 / nor);
+    c3mod = cz / um12;
+    /* std::cout << "x,y,z(great circle): " << fatr * c1 << " "
+              << fatr * c3mod / um << " " << fatr * c3mod << std::endl; */
+    if (cz * fatr >= 0 && safeAbsR(c1, c3mod) <= rm) {
+      curMin = std::min(curMin, fatr * nor);
+    }
+
+    // finally, we can do the basic version
+    float z = fm;
+    float x = rm * fm;
+    float y = um * fm;
+    float mod = std::sqrt(x * x + y * y + z * z) / fm;
+    z /= mod;
+    x /= mod;
+    y /= mod;
+    float pru = c1 * x + c2 * y + c3 * z;
+    float pr0u = c1 * x - c2 * y + c3 * z;
+    float p0ru = -c1 * x + c2 * y + c3 * z;
+    float p0r0u = -c1 * x - c2 * y + c3 * z;
+    return std::min(
+        curMin,
+        std::min(0.f, std::min(pru, std::min(pr0u, std::min(p0ru, p0r0u)))));
+  }
+
 public:
-  TerrainIndexer(const SliceDirs &sd, int sidel) {
-    v::FVec<5> rmod = sd.fm * sd.rm * sd.r;
-    v::FVec<5> umod = sd.fm * sd.um * sd.u;
-    v::FVec<5> tmp = sd.c + sd.fm * sd.f;
+  TerrainIndexer(const SliceDirs &sd, int sidel, bool usePyramid = true) {
+    v::IVec<5> lowest, highest;
+    if (usePyramid) {
+      v::FVec<5> rmod = sd.fm * sd.rm * sd.r;
+      v::FVec<5> umod = sd.fm * sd.um * sd.u;
+      v::FVec<5> tmp = sd.c + sd.fm * sd.f;
+      v::FVec<5> tmpr = tmp + rmod;
+      v::FVec<5> tmpru = tmpr + umod;
+      v::FVec<5> tmpr0u = tmpr - umod;
+      v::FVec<5> tmp0r = tmp - rmod;
+      v::FVec<5> tmp0ru = tmp0r + umod;
+      v::FVec<5> tmp0r0u = tmp0r - umod;
 
-    v::FVec<5> tmpr = tmp + rmod;
+      lowest = vfloor(
+          v::elementwiseMin(
+              sd.c,
+              v::elementwiseMin(
+                  tmpru, v::elementwiseMin(
+                             tmpr0u, v::elementwiseMin(tmp0ru, tmp0r0u)))) -
+          sidel - 1e-3f);
+      highest = vfloor(
+          v::elementwiseMax(
+              sd.c,
+              v::elementwiseMax(
+                  tmpru, v::elementwiseMax(
+                             tmpr0u, v::elementwiseMax(tmp0ru, tmp0r0u)))) +
+          1e-3f);
+    } else {
+      v::FVec<5> lo, hi;
+      lo[0] = optimize(sd.r[0], sd.u[0], sd.f[0], sd.rm, sd.um, sd.fm);
+      lo[1] = optimize(sd.r[1], sd.u[1], sd.f[1], sd.rm, sd.um, sd.fm);
+      lo[2] = optimize(sd.r[2], sd.u[2], sd.f[2], sd.rm, sd.um, sd.fm);
+      lo[3] = optimize(sd.r[3], sd.u[3], sd.f[3], sd.rm, sd.um, sd.fm);
+      lo[4] = optimize(sd.r[4], sd.u[4], sd.f[4], sd.rm, sd.um, sd.fm);
+      lowest = vfloor(sd.c + lo - sidel - 1e-3f);
 
-    v::FVec<5> tmpru = tmpr + umod;
-    v::FVec<5> tmprnu = tmpr - umod;
-
-    v::FVec<5> tmpnr = tmp - rmod;
-
-    v::FVec<5> tmpnru = tmpnr + umod;
-    v::FVec<5> tmpnrnu = tmpnr - umod;
-
-    /*
-    std::cout << "tmp vals, here we go!" << std::endl;
-    std::cout << sd.c << std::endl;
-    std::cout << tmpru << std::endl;
-    std::cout << tmprnu << std::endl;
-    std::cout << tmpnru << std::endl;
-    std::cout << tmpnrnu << std::endl;
-    std::cout << std::endl;
-    */
-
-    v::IVec<5> lowest = vfloor(
-        v::elementwiseMin(
-            sd.c, v::elementwiseMin(
-                      tmpru, v::elementwiseMin(
-                                 tmprnu, v::elementwiseMin(tmpnru, tmpnrnu)))) -
-        sidel - 1e-3f);
-    v::IVec<5> highest = vfloor(
-        v::elementwiseMax(
-            sd.c, v::elementwiseMax(
-                      tmpru, v::elementwiseMax(
-                                 tmprnu, v::elementwiseMax(tmpnru, tmpnrnu)))) +
-        1e-3f);
+      hi[0] = -optimize(-sd.r[0], -sd.u[0], -sd.f[0], sd.rm, sd.um, sd.fm);
+      hi[1] = -optimize(-sd.r[1], -sd.u[1], -sd.f[1], sd.rm, sd.um, sd.fm);
+      hi[2] = -optimize(-sd.r[2], -sd.u[2], -sd.f[2], sd.rm, sd.um, sd.fm);
+      hi[3] = -optimize(-sd.r[3], -sd.u[3], -sd.f[3], sd.rm, sd.um, sd.fm);
+      hi[4] = -optimize(-sd.r[4], -sd.u[4], -sd.f[4], sd.rm, sd.um, sd.fm);
+      highest = vfloor(sd.c + hi + 1e-3f);
+    }
     v::IVec<5> diffs = highest - lowest + 1; // nums in interval [a,b] is b-a+1
 
     v::FVec<5> a = sd.r;
@@ -88,13 +185,6 @@ public:
                            a[td1] * b[td2] - a[td2] * b[td1]};
           c3 /= det;
 
-          /*
-          std::cout << "inverse matrix transpose pog" << std::endl;
-          std::cout << c1 << std::endl;
-          std::cout << c2 << std::endl;
-          std::cout << c3 << std::endl;
-          */
-
           int td4 = 0;
           for (; td4 < N; td4++) {
             if (td4 != td1 && td4 != td2 && td4 != td3) {
@@ -115,8 +205,6 @@ public:
           v::FVec<3> tm5 = {a[td5] * c1[0] + b[td5] * c1[1] + c[td5] * c1[2],
                             a[td5] * c2[0] + b[td5] * c2[1] + c[td5] * c2[2],
                             a[td5] * c3[0] + b[td5] * c3[1] + c[td5] * c3[2]};
-
-          // std::cout << "tm5: " << tm5 << std::endl;
 
           std::size_t w4 = fastFloor(sidel * l1norm(tm4) + sidel + 1.001);
           std::size_t w5 = fastFloor(sidel * l1norm(tm5) + sidel + 1.001);
@@ -160,22 +248,6 @@ public:
     v::FVec<3> vf = {(float)v[d1], (float)v[d2], (float)v[d3]};
     int v4c = harshFloor(v::dot(vf - b4, m4) + o4);
     int v5c = harshFloor(v::dot(vf - b5, m5) + o5);
-
-    /*
-    std::cout << "GETINDEX HERE!!!" << std::endl;
-    std::cout << "v: " << v << std::endl;
-    std::cout << size << " " << d1 << " " << d2 << " " << d3 << " " << d4 << " "
-              << d5 << std::endl;
-    std::cout << cs[0] << " " << cs[1] << " " << cs[2] << " " << v4c << " "
-              << v5c << std::endl;
-    std::cout << xs << " " << ys << " " << zs << " " << s4 << std::endl;
-    std::cout << "vf: " << vf << std::endl;
-    std::cout << "b5: " << b5 << std::endl;
-    std::cout << "vf - b5: " << vf - b5 << std::endl;
-    std::cout << "o5: " << o5 << std::endl;
-    std::cout << "m5: " << m5 << std::endl;
-    */
-
     std::size_t kek = (v[d1] - cs[0]) * xs + (v[d2] - cs[1]) * ys +
                       (v[d3] - cs[2]) * zs + (v[d4] - v4c) * s4 + (v[d5] - v5c);
     return kek;
@@ -190,21 +262,6 @@ public:
     v::FVec<3> vf = {(float)ret[d1], (float)ret[d2], (float)ret[d3]};
     int v4c = harshFloor(v::dot(vf - b4, m4) + o4);
     int v5c = harshFloor(v::dot(vf - b5, m5) + o5);
-
-    /*
-    std::cout << "GETCOORD5 HERE!!!" << std::endl;
-    std::cout << "i5: " << i5 << std::endl;
-    std::cout << d1 << " " << d2 << " " << d3 << " " << d4 << " " << d5
-              << std::endl;
-    std::cout << cs[0] << " " << cs[1] << " " << cs[2] << " " << v4c << " "
-              << v5c << std::endl;
-    std::cout << "vf: " << vf << std::endl;
-    std::cout << "b5: " << b5 << std::endl;
-    std::cout << "vf - b5: " << vf - b5 << std::endl;
-    std::cout << "o5: " << o5 << std::endl;
-    std::cout << "m5: " << m5 << std::endl;
-    */
-
     ret[d4] = i5[d4] + v4c;
     ret[d5] = i5[d5] + v5c;
     return ret;
@@ -218,6 +275,21 @@ public:
     i -= s4 * (i5[d4] = i / s4);
     i5[d5] = i;
     return getCoord5(i5);
+  }
+
+  void report() const {
+    std::cout << "Report of Internal Data in TerrainIndexer." << std::endl;
+    std::cout << "d's: " << d1 << " " << d2 << " " << d3 << " " << d4 << " "
+              << d5 << std::endl;
+    std::cout << "m4: " << m4 << std::endl;
+    std::cout << "m5: " << m5 << std::endl;
+    std::cout << "b4: " << b4 << std::endl;
+    std::cout << "b5: " << b5 << std::endl;
+    std::cout << "o4, o5: " << o4 << " " << o5 << std::endl;
+    std::cout << std::endl;
+    std::cout << "cs :" << cs << std::endl;
+    std::cout << "xs, ys, zs, s4, size: " << xs << " " << ys << " " << zs << " "
+              << s4 << " " << size << std::endl;
   }
 };
 
