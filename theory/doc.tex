@@ -1,0 +1,61 @@
+\documentclass[a4paper]{article}
+\usepackage{mathtools}
+\usepackage{amssymb}
+\begin{document}
+  Let $d$ be basis point, $a$, $b$, $c$ be orthonormal spanning vectors. Let $L$ be sidelength.
+  
+  Indexer works by choosing three dimensions as "spanning dimensions," which
+  greatly reduce the stride for the others. Let these be the first three dimensions, WLOG. Then:
+  \begin{gather*}
+    d=\begin{bmatrix}d_3&d_{o}\end{bmatrix}^{T}\\
+    a=\begin{bmatrix}a_3&a_{o}\end{bmatrix}^{T}\\
+    b=\begin{bmatrix}b_3&b_{o}\end{bmatrix}^{T}\\
+    c=\begin{bmatrix}c_3&c_{o}\end{bmatrix}^{T}
+  \end{gather*}
+. Let's solve the location for a given $s_3\in \mathbb{Z}_{+}^{3}$. Let the actual location be:
+  \[
+    s=\begin{bmatrix}s_3&s_{o}\end{bmatrix}^{T}\\
+  .\] Then, there exists $x,y,z\in\mathbb{R}$, such that:
+  \begin{gather*}
+    s\le d+xa+yb+zc \le s+L\\
+    \implies s_3\le d_3+xa_3+yb_3+zc_3\le s_3+L\text{ AND}\\
+    s_{o}\le d_{o}+xa_{o}+yb_{o}+zc_{o}\le s_{o}+\mathbf{?}
+  \end{gather*}
+  . Let:
+  \begin{gather*}
+    v_0=\begin{bmatrix}
+      x\\
+      y\\
+      z\\
+    \end{bmatrix}\\
+    T_3=\begin{bmatrix}
+      a_3&b_3&c_3
+    \end{bmatrix}\\
+    v_3=T_3v_0\\
+    T_{o}=\begin{bmatrix}
+      a_{o}&b_{o}&c_{o}
+    \end{bmatrix}
+  \end{gather*}
+  . Then, we get:
+  \begin{gather*}
+    s_{o}-d_{o}\le T_{o}T_3^{-1}v_3\le s_{o}-d_{o}+\mathbf{?}
+  \end{gather*}
+  while $v_3$ can fully vary within the inequality
+  \begin{gather*}
+    s_3-d_3\le v_3\le s_3-d_3+L
+  \end{gather*}
+  If $m$ is the row of $T_{o}T_3^{-1}$ of index $i$, then:
+  \begin{gather*}
+    s_{i}-d_{i}\le m\cdot v_3\le s_{i}-d_{i}+?
+  \end{gather*}
+  and the problem is reduced to the minimization and maximization of the dot product under
+  the specified inequalities imposed on $v_3$. The range, however, of this dot product, is clearly
+  $L\lVert m\rVert_{1}$.
+
+  For clarity's sake, this makes the stride equal to $\lfloor L\lVert m\rVert_{1}+L+1\rfloor$.
+  To show this, let $l=L\lVert m\rVert_{1}$, and let the actual range be $[p,p+l]$.
+  The lowest segment of length $L$ that can intersect this is $[p-L,p]$, and the highest is
+  $[p+l,p+l+L]$. The range of the bottom of the segments is then $p+l-(p-L)=l+L$. The maximum possible
+  number of integers in a segment of that length, is then what we have.
+\end{document}
+
