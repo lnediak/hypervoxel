@@ -150,33 +150,33 @@ struct EqualFunctor {
   }
 };
 
-template <class T1, class T2, std::size_t N, class U, class A> struct UnaryOp {
+template <class T, std::size_t N, class U, class A> struct UnaryOp {
 
   const A &a;
 
-  typedef UnaryOp<T1, T2, N - 1, U, A> smaller;
+  typedef UnaryOp<T, N - 1, U, A> smaller;
   typedef void thisisavvec;
-  typedef T2 value_type;
+  typedef T value_type;
   static const std::size_t size = N;
 
   UnaryOp(const A &a) : a(a) {}
 
   const smaller gsmaller() { return smaller(a); }
 
-  T2 operator[](std::size_t i) const { return U::apply(a[i]); }
+  T operator[](std::size_t i) const { return U::apply(a[i]); }
 
-  void evaluateInto(T2 *data) const {
+  void evaluateInto(T *data) const {
     gsmaller().evaluateInto(data);
     data[N - 1] = operator[](N - 1);
   }
 };
 
-template <class T1, class T2, class U, class A>
-struct UnaryOp<T1, T2, 0, U, A> {
+template <class T, class U, class A>
+struct UnaryOp<T, 0, U, A> {
 
   UnaryOp(const A &) {}
 
-  void evaluateInto(T2 *) {}
+  void evaluateInto(T *) {}
 };
 
 // ------------------------TYPEDEFS------------------
@@ -229,7 +229,7 @@ template <class T> struct NegU {
   static T apply(T a) { return -a; }
 };
 template <class T, std::size_t N, class A>
-using UnaryNeg = UnaryOp<T, T, N, NegU<T>, A>;
+using UnaryNeg = UnaryOp<T, N, NegU<T>, A>;
 
 template <class T> struct MinU {
   static T apply(T a, T b) { return a > b ? b : a; }
@@ -471,48 +471,6 @@ template <> struct IVecHash<1> : protected IVecHash<2> {
 
   std::size_t operator()(const IVec<1> &arg) const noexcept {
     return murmurscram(arg[0]);
-  }
-};
-
-template <std::size_t M, class A, class = typename A::thisisavvec>
-struct DVecFrom {
-
-  typedef void thisisavvec;
-  typedef double value_type;
-  static const std::size_t size = M;
-
-  const A &a;
-
-  value_type operator[](std::size_t i) const { return a[i]; }
-};
-
-template <class A> DVecFrom<A::size, A> toDVec(const A &a) { return {a}; }
-
-template <std::size_t M> struct DVecFloor {
-
-  typedef void thisisavvec;
-  typedef std::int32_t value_type;
-  static const std::size_t size = M;
-
-  const DVec<M> &a;
-
-  value_type operator[](std::size_t i) const {
-    double val = a[i];
-    value_type toreturn = val;
-    toreturn -= (toreturn > val);
-    return toreturn;
-  }
-};
-template <std::size_t M> struct DVecAbs {
-
-  typedef void thisisavvec;
-  typedef double value_type;
-  static const std::size_t size = M;
-
-  const DVec<M> &a;
-
-  value_type operator[](std::size_t i) const {
-    return a[i] >= 0 ? a[i] : -a[i];
   }
 };
 

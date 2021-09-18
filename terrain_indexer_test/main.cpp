@@ -37,8 +37,9 @@ bool ortho(const float *a, float *b) {
 
 /// RandFloat should return value in (-1, 1)
 template <class RandFloat>
-hypervoxel::SliceDirs randSliceDirs(RandFloat &randFloat, bool fixM = false) {
-  hypervoxel::SliceDirs ret;
+hypervoxel::SliceDirs<5> randSliceDirs(RandFloat &randFloat,
+                                       bool fixM = false) {
+  hypervoxel::SliceDirs<5> ret;
   do {
     float g[16];
     for (int i = 0; i < 16; i += 2) {
@@ -133,7 +134,7 @@ int runTest(int numIndexers = 100000, int numPoints = 10000,
       std::cout << "Indexer #" << spam << std::endl;
     }
     auto lambda = [&]() -> float { return distro(mtrand); };
-    hypervoxel::SliceDirs sd = randSliceDirs(lambda);
+    hypervoxel::SliceDirs<5> sd = randSliceDirs(lambda);
     int sidel = iDist(mtrand);
     hypervoxel::TerrainIndexer ti(sd, sidel, usePyramid);
 
@@ -178,14 +179,14 @@ void printMaxSize(int numIndexers, bool usePyramid) {
 
   std::uniform_real_distribution<float> fDist(0, 1);
   std::size_t maxSize = 0;
-  hypervoxel::SliceDirs maxSlices;
+  hypervoxel::SliceDirs<5> maxSlices;
   char maxTi[sizeof(hypervoxel::TerrainIndexer)];
   for (int spam = 0; spam < numIndexers; spam++) {
     if (spam % 1000000 == 0) {
       std::cout << "Indexer #" << spam << std::endl;
     }
     auto lambda = [&]() -> float { return distro(mtrand); };
-    hypervoxel::SliceDirs sd = randSliceDirs(lambda, true);
+    hypervoxel::SliceDirs<5> sd = randSliceDirs(lambda, true);
     int sidel = 1; // can change this
     hypervoxel::TerrainIndexer ti(sd, sidel, usePyramid);
     if (ti.getSize() > maxSize) {

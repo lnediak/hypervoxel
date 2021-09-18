@@ -115,7 +115,7 @@ class TerrainIndexer {
   }
 
 public:
-  TerrainIndexer(const SliceDirs &sd, int sidel, bool usePyramid = true) {
+  TerrainIndexer(const SliceDirs<5> &sd, int sidel, bool usePyramid = true) {
     v::IVec<5> lowest, highest;
     if (usePyramid) {
       v::FVec<5> rmod = sd.fm * sd.rm * sd.r;
