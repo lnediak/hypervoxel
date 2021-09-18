@@ -1,3 +1,6 @@
+#ifndef HYPERVOXEL_TERRAIN_INDEXER_HPP_
+#define HYPERVOXEL_TERRAIN_INDEXER_HPP_
+
 #include <cmath>
 #include <iostream>
 
@@ -294,4 +297,6 @@ public:
 };
 
 } // namespace hypervoxel
+
+#endif // HYPERVOXEL_TERRAIN_INDEXER_HPP_
 
