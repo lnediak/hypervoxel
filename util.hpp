@@ -1,8 +1,6 @@
 #ifndef HYPERVOXEL_UTIL_HPP_
 #define HYPERVOXEL_UTIL_HPP_
 
-#include <memory>
-
 #include "vector.hpp"
 
 namespace hypervoxel {
@@ -13,16 +11,6 @@ template <std::size_t N> struct SliceDirs {
   v::FVec<N> r, u, f; /// right, up, forward
   float fm;           /// forward multiplier (render distance)
   float rm, um;       /// r and u multipliers (at f dist. 1) (aspect ratio+fov)
-};
-
-struct UShort32 {
-  unsigned short s[32];
-};
-
-/// noting, of course, that T should be TerrainIndexer
-template <class T> struct TerrainLerpable {
-  T ti;
-  std::unique_ptr<UShort32[]> td;
 };
 
 // ---------------------- ACTUAL UTILITY FUNCTIONS BELOW -----------------------
@@ -143,6 +131,67 @@ typename A::value_type vabs(const A &a) {
 template <class A, class = typename rem_cvr<A>::thisisavvec>
 typename A::value_type l1norm(const A &a) {
   return L1Norm<typename A::value_type, A::size, A>(a).evaluate();
+}
+
+// ------------ LERPING!!!!!! -------------
+
+template <std::size_t N> struct BitsVec {
+  typedef void thisisavvec;
+  typedef std::int32_t value_type;
+  static const std::size_t size = N;
+
+  std::size_t value;
+
+  value_type operator[](std::size_t i) const { return (value & (1 << i)) >> i; }
+};
+template <std::size_t N> struct SplitVec {
+  typedef void thisisavvec;
+  typedef double value_type;
+  static const std::size_t size = N;
+
+  const v::IVec<N> &inds;
+  const double *vecs[2];
+
+  value_type operator[](std::size_t i) const { return vecs[inds[i]][i]; }
+};
+template <std::size_t N, std::size_t M, std::size_t I, class A> struct Lerper {
+  typedef void thisisavvec;
+  typedef double value_type;
+  static const std::size_t size = 1 << (M - 1);
+
+  A tolerp;
+  const v::DVec<N> &lerp;
+
+  value_type operator[](std::size_t i) const {
+    double x = tolerp[i];
+    double y = tolerp[i + size];
+    return x + lerp[I] * (y - x);
+  }
+};
+template <std::size_t N, std::size_t M, std::size_t I, class A> struct LerperT {
+  typedef LerperT<N, M + 1, I - 1, A> nextlerpert;
+  typedef Lerper<N, M, I, typename nextlerpert::nextlerper> nextlerper;
+
+  nextlerper operator()(A &&tolerp, const v::DVec<N> &lerp) const {
+    return {nextlerpert{}(std::move(tolerp), lerp), lerp};
+  }
+};
+template <std::size_t N, std::size_t M, class A> struct LerperT<N, M, 0, A> {
+  typedef Lerper<N, M, 0, A> nextlerper;
+
+  nextlerper operator()(A &&tolerp, const v::DVec<N> &lerp) const {
+    return {std::move(tolerp), lerp};
+  }
+};
+
+template <class T, class A, class B, class = typename A::thisisavvec,
+          class = typename B::thisisavvec,
+          class = typename std::enable_if<
+              std::is_same<T, typename A::value_type>::value &&
+              std::is_same<T, typename B::value_type>::value &&
+              A::size == (1 << B::size)>::type>
+T vlerpAll(const A &vecpow, const B &lerp) {
+  return LerperT<B::size, 1, B::size - 1, A>{}(vecpow, lerp)[0];
 }
 
 } // namespace hypervoxel

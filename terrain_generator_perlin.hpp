@@ -9,27 +9,6 @@ namespace hypervoxel {
 
 template <std::size_t N> class TerrainGeneratorPerlin {
 
-  struct BitsVec {
-    typedef void thisisavvec;
-    typedef std::int32_t value_type;
-    static const std::size_t size = N;
-
-    std::size_t value;
-
-    value_type operator[](std::size_t i) const {
-      return (value & (1 << i)) >> i;
-    }
-  };
-  struct SplitVec {
-    typedef void thisisavvec;
-    typedef double value_type;
-    static const std::size_t size = N;
-
-    const v::IVec<N> &inds;
-    const double *vecs[2];
-
-    value_type operator[](std::size_t i) const { return vecs[inds[i]][i]; }
-  };
   struct GetResult {
     typedef void thisisavvec;
     typedef double value_type;
@@ -48,35 +27,6 @@ template <std::size_t N> class TerrainGeneratorPerlin {
           gradVecs +
           N * ((v::IVecHash<N>{}(posf + bits) + octave) & numGradVecsMask));
       return v::sum(svecs * gvec);
-    }
-  };
-  template <std::size_t M, std::size_t I, class A> struct Lerper {
-    typedef void thisisavvec;
-    typedef double value_type;
-    static const std::size_t size = 1 << (M - 1);
-
-    A tolerp;
-    const v::DVec<N> &lerp;
-
-    value_type operator[](std::size_t i) const {
-      double x = tolerp[i];
-      double y = tolerp[i + size];
-      return x + lerp[I] * (y - x);
-    }
-  };
-  template <std::size_t M, std::size_t I, class A> struct LerperT {
-    typedef LerperT<M + 1, I - 1, A> nextlerpert;
-    typedef Lerper<M, I, typename nextlerpert::nextlerper> nextlerper;
-
-    nextlerper operator()(A &&tolerp, const v::DVec<N> &lerp) const {
-      return {nextlerpert{}(std::move(tolerp), lerp), lerp};
-    }
-  };
-  template <std::size_t M, class A> struct LerperT<M, 0, A> {
-    typedef Lerper<M, 0, A> nextlerper;
-
-    nextlerper operator()(A &&tolerp, const v::DVec<N> &lerp) const {
-      return {std::move(tolerp), lerp};
     }
   };
 
@@ -105,12 +55,12 @@ public:
       v::DVec<N> vec0 = pos - v::toDVec(posf);
       v::DVec<N> vec1 = vec0 - 1.;
       v::DVec<N> lerp = vec0 * vec0 * (3. - 2. * vec0);
-      total += LerperT<1, N - 1, GetResult>{}(GetResult{options.gradVecs,
-                                                        options.numGradVecsMask,
-                                                        i,
-                                                        posf,
-                                                        {vec0.data, vec1.data}},
-                                              lerp)[0] *
+      total += vlerpAll(GetResult{options.gradVecs,
+                                  options.numGradVecsMask,
+                                  i,
+                                  posf,
+                                  {vec0.data, vec1.data}},
+                        lerp) *
                amplitude;
       amplitude *= options.persistence;
       pos *= 2.;

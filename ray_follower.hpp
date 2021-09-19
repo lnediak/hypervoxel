@@ -1,7 +1,8 @@
 #ifndef HYPERVOXEL_RAY_FOLLOWER_HPP_
 #define HYPERVOXEL_RAY_FOLLOWER_HPP_
 
-#include "terrain_indexer.hpp"
+#include <cmath>
+
 #include "util.hpp"
 
 namespace hypervoxel {
@@ -35,17 +36,19 @@ public:
     v::FVec<N> invs = 1.f / ray; // inverses
     v::FVec<N> fsig1 = v::UnaryOp<float, N, FSign1, v::FVec<N>>(invs);
     v::IVec<N> fsig2 = v::UnaryOp<int, N, FSign2, v::FVec<N>>(invs);
+    int sigtmp = 0;
+    EI<float> val{0.f, 0};
     while (true) {
       cp = c + dist * ray;
-      if (op(cb)) {
+      if (op(cb, val.b, sigtmp)) {
         return;
       }
-      EI<float> val = vminI((fsig1 + vint2float(cb) - cp) * invs);
+      val = vminI((fsig1 + vint2float(cb) - cp) * invs);
       dist += ffmax(val.a, 1e-5f);
       if (dist >= 1) {
         break;
       }
-      cb[val.b] += fsig2[val.b];
+      cb[val.b] += sigtmp = fsig2[val.b];
     }
   }
 };
