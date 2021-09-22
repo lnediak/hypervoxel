@@ -23,6 +23,8 @@ class TerrainIndexer {
 
   std::size_t size;
 
+  int wx1, wy1, wz1, w41, w51;
+
   static float safeAbsR(float a, float b) {
     if (a == 0 && b == 0) {
       return 0;
@@ -226,6 +228,13 @@ public:
             m4 = tm4;
             m5 = tm5;
             cs = {lowest[d1], lowest[d2], lowest[d3]};
+
+            wx1 = wx - 1;
+            wy1 = wy - 1;
+            wz1 = wz - 1;
+            w41 = w4 - 1;
+            w51 = w5 - 1;
+
             s4 = w5;
             zs = w4 * w5;
             ys = wz * zs;
@@ -247,37 +256,81 @@ public:
 
   std::size_t getSize() const { return size; }
 
+  void getV4cV5c(int v1, int v2, int v3, int &v4c, int &v5c) const {
+    v::FVec<3> vf = {(float)v1, (float)v2, (float)v3};
+    v4c = harshFloor(v::dot(vf - b4, m4) + o4);
+    v5c = harshFloor(v::dot(vf - b5, m5) + o5);
+  }
+
   std::size_t getIndex(v::IVec<5> v) const {
-    v::FVec<3> vf = {(float)v[d1], (float)v[d2], (float)v[d3]};
-    int v4c = harshFloor(v::dot(vf - b4, m4) + o4);
-    int v5c = harshFloor(v::dot(vf - b5, m5) + o5);
+    int v4c, v5c;
+    getV4cV5c(v[d1], v[d2], v[d3], v4c, v5c);
     std::size_t kek = (v[d1] - cs[0]) * xs + (v[d2] - cs[1]) * ys +
                       (v[d3] - cs[2]) * zs + (v[d4] - v4c) * s4 + (v[d5] - v5c);
     return kek;
   }
 
+  v::IVec<5> getI5(std::size_t i) const {
+    v::IVec<5> i5;
+    i -= xs * (i5[0] = i / xs);
+    i -= ys * (i5[1] = i / ys);
+    i -= zs * (i5[2] = i / zs);
+    i -= s4 * (i5[3] = i / s4);
+    i5[4] = i;
+    return i5;
+  }
+
   /// in format [d1, d2, d3, d4, d5]
   v::IVec<5> getCoord5(v::IVec<5> i5) const {
     v::IVec<5> ret;
-    ret[d1] = i5[d1] + cs[0];
-    ret[d2] = i5[d2] + cs[1];
-    ret[d3] = i5[d3] + cs[2];
+    ret[d1] = i5[0] + cs[0];
+    ret[d2] = i5[1] + cs[1];
+    ret[d3] = i5[2] + cs[2];
     v::FVec<3> vf = {(float)ret[d1], (float)ret[d2], (float)ret[d3]};
     int v4c = harshFloor(v::dot(vf - b4, m4) + o4);
     int v5c = harshFloor(v::dot(vf - b5, m5) + o5);
-    ret[d4] = i5[d4] + v4c;
-    ret[d5] = i5[d5] + v5c;
+    ret[d4] = i5[3] + v4c;
+    ret[d5] = i5[4] + v5c;
     return ret;
   }
 
-  v::IVec<5> getCoord(std::size_t i) const {
-    v::IVec<5> i5;
-    i -= xs * (i5[d1] = i / xs);
-    i -= ys * (i5[d2] = i / ys);
-    i -= zs * (i5[d3] = i / zs);
-    i -= s4 * (i5[d4] = i / s4);
-    i5[d5] = i;
-    return getCoord5(i5);
+  v::IVec<5> getCoord(std::size_t i) const { return getCoord5(getI5(i)); }
+
+  bool incCoord5(v::IVec<5> &coord, v::IVec<5> &i5) {
+    if (i5[4] >= w51) {
+      i5[4] = 0;
+      if (i5[3] >= w41) {
+        i5[3] = 0;
+        if (i5[2] >= wz1) {
+          i5[2] = 0;
+          coord[d3] -= wz1;
+          if (i5[1] >= wy1) {
+            i5[1] = 0;
+            coord[d2] -= wy1;
+            if (i5[0] >= wx1) {
+              return false;
+            }
+            i5[0]++;
+            coord[d1]++;
+          } else {
+            i5[1]++;
+            coord[d2]++;
+          }
+        } else {
+          i5[2]++;
+          coord[d3]++;
+        }
+        getV4cV5c(coord[d1], coord[d2], coord[d3], coord[d4], coord[d5]);
+        return true;
+      }
+      coord[d5] -= w51;
+      i5[3]++;
+      coord[d4]++;
+    } else {
+      i5[4]++;
+      coord[d5]++;
+    }
+    return true;
   }
 
   void report() const {
@@ -290,9 +343,11 @@ public:
     std::cout << "b5: " << b5 << std::endl;
     std::cout << "o4, o5: " << o4 << " " << o5 << std::endl;
     std::cout << std::endl;
-    std::cout << "cs :" << cs << std::endl;
+    std::cout << "cs: " << cs << std::endl;
     std::cout << "xs, ys, zs, s4, size: " << xs << " " << ys << " " << zs << " "
               << s4 << " " << size << std::endl;
+    std::cout << "wx1, wy1, wz1, w41, w51: " << wx1 << " " << wy1 << " " << wz1
+              << " " << w41 << " " << w51 << std::endl;
   }
 };
 

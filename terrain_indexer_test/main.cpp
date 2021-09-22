@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <random>
@@ -101,7 +102,7 @@ hypervoxel::SliceDirs<5> randSliceDirs(RandFloat &randFloat,
   ret.um = randFloat() + 1.5;
 
   if (fixM) {
-    ret.fm = 100;
+    ret.fm = 20;
     ret.rm = 1.5;
     ret.um = 1.5;
   }
@@ -121,22 +122,61 @@ randViewable(std::mt19937 &mtrand, const hypervoxel::v::FVec<5> &p, int sidel) {
   return ret;
 }
 
+#define DO_INCCOORD5_TEST
 int runTest(int numIndexers = 100000, int numPoints = 10000,
             bool usePyramid = true, int verbosity = 100,
             std::uint_fast32_t seed = 1) {
   std::mt19937 mtrand(seed);
   std::uniform_real_distribution<float> distro(-1, 1);
 
-  std::uniform_int_distribution<> iDist(1, 10);
+  std::uniform_int_distribution<> iDist(1, 1);
+  // std::uniform_int_distribution<> iDist(1, 10);
   std::uniform_real_distribution<float> fDist(0, 1);
+#ifdef DO_INCCOORD5_TEST
+  int maxDur = 0;
+#endif // DO_INCCOORD5_TEST
   for (int spam = 0; spam < numIndexers; spam++) {
     if (spam % verbosity == 0) {
       std::cout << "Indexer #" << spam << std::endl;
     }
     auto lambda = [&]() -> float { return distro(mtrand); };
-    hypervoxel::SliceDirs<5> sd = randSliceDirs(lambda);
+    // TODO: change true to false
+    hypervoxel::SliceDirs<5> sd = randSliceDirs(lambda, true);
     int sidel = iDist(mtrand);
     hypervoxel::TerrainIndexer ti(sd, sidel, usePyramid);
+
+    // added here - incCoord5 test
+#ifdef DO_INCCOORD5_TEST
+    hypervoxel::v::IVec<5> i5 = ti.getI5(0);
+    hypervoxel::v::IVec<5> coord = ti.getCoord5(i5);
+    std::size_t index = 0;
+    auto currTime = std::chrono::high_resolution_clock::now();
+    do {
+      if (ti.getIndex(coord) != index || ti.getCoord5(i5) != coord ||
+          ti.getI5(index) != i5) {
+        std::cout << "ERROR!!! incCoord values not lined up" << std::endl;
+        std::cout << "index: " << index << std::endl;
+        std::cout << "i5: " << i5 << std::endl;
+        std::cout << "coord: " << coord << std::endl;
+        ti.report();
+        return 1;
+      }
+      index++;
+    } while (ti.incCoord5(coord, i5));
+    if (index != ti.getSize()) {
+      std::cout << "ERROR!!! incCoord does not get exactly 'size' values"
+                << std::endl;
+      std::cout << "wrong index: " << index << std::endl;
+      ti.report();
+    }
+    int dur = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::high_resolution_clock::now() - currTime)
+                  .count();
+    if (dur > maxDur) {
+      maxDur = dur;
+    }
+#endif // DO_INCCOORD5_TEST
+       // end added test
 
     for (int rkel = 0; rkel < numPoints; rkel++) {
       float x, y, z;
@@ -157,6 +197,7 @@ int runTest(int numIndexers = 100000, int numPoints = 10000,
         std::cout << "v: " << v << std::endl;
         std::cout << "point: " << point << std::endl;
         std::cout << "x,y,z: " << x << " " << y << " " << z << std::endl;
+        ti.report();
         return 1;
       }
       hypervoxel::v::IVec<5> vr = ti.getCoord(i);
@@ -166,10 +207,14 @@ int runTest(int numIndexers = 100000, int numPoints = 10000,
         std::cout << "v,vr: " << v << " " << vr << std::endl;
         std::cout << "point: " << point << std::endl;
         std::cout << "x,y,z: " << x << " " << y << " " << z << std::endl;
+        ti.report();
         return 1;
       }
     }
   }
+#ifdef DO_INCCOORD5_TEST
+  std::cout << "max duration: " << maxDur << std::endl;
+#endif
   return 0;
 }
 
@@ -206,7 +251,7 @@ void printMaxSize(int numIndexers, bool usePyramid) {
 }
 
 int main() {
-  return runTest(100000, 10000, false);
+  return runTest(10000, 1, false);
   // printMaxSize(100000000, false);
 }
 
