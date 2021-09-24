@@ -272,25 +272,24 @@ public:
 
   v::IVec<5> getI5(std::size_t i) const {
     v::IVec<5> i5;
-    i -= xs * (i5[0] = i / xs);
-    i -= ys * (i5[1] = i / ys);
-    i -= zs * (i5[2] = i / zs);
-    i -= s4 * (i5[3] = i / s4);
-    i5[4] = i;
+    i -= xs * (i5[d1] = i / xs);
+    i -= ys * (i5[d2] = i / ys);
+    i -= zs * (i5[d3] = i / zs);
+    i -= s4 * (i5[d4] = i / s4);
+    i5[d5] = i;
     return i5;
   }
 
   /// in format [d1, d2, d3, d4, d5]
   v::IVec<5> getCoord5(v::IVec<5> i5) const {
     v::IVec<5> ret;
-    ret[d1] = i5[0] + cs[0];
-    ret[d2] = i5[1] + cs[1];
-    ret[d3] = i5[2] + cs[2];
-    v::FVec<3> vf = {(float)ret[d1], (float)ret[d2], (float)ret[d3]};
-    int v4c = harshFloor(v::dot(vf - b4, m4) + o4);
-    int v5c = harshFloor(v::dot(vf - b5, m5) + o5);
-    ret[d4] = i5[3] + v4c;
-    ret[d5] = i5[4] + v5c;
+    int v1 = ret[d1] = i5[d1] + cs[0];
+    int v2 = ret[d2] = i5[d2] + cs[1];
+    int v3 = ret[d3] = i5[d3] + cs[2];
+    int v4c, v5c;
+    getV4cV5c(v1, v2, v3, v4c, v5c);
+    ret[d4] = i5[d4] + v4c;
+    ret[d5] = i5[d5] + v5c;
     return ret;
   }
 
@@ -332,6 +331,48 @@ public:
     }
     return true;
   }
+
+  // ---------- FOR TRANSFERING TO OPENCL ---------- //
+
+  template <class cflt, class cint> void serialize(cflt *fd) {
+    cint *id = (cint *)fd;
+    *id++ = d1;
+    *id++ = d2;
+    *id++ = d3;
+    *id++ = d4;
+    *id++ = d5;
+
+    fd = (cflt *)id;
+    *fd++ = m4[0];
+    *fd++ = m4[1];
+    *fd++ = m4[2];
+    *fd++ = m5[0];
+    *fd++ = m5[1];
+    *fd++ = m5[2];
+
+    *fd++ = b4[0];
+    *fd++ = b4[1];
+    *fd++ = b4[2];
+    *fd++ = b5[0];
+    *fd++ = b5[1];
+    *fd++ = b5[2];
+
+    *fd++ = o4;
+    *fd++ = o5;
+
+    id = (cint *)fd;
+    *id++ = cs[0];
+    *id++ = cs[1];
+    *id++ = cs[2];
+    *id++ = xs;
+    *id++ = ys;
+    *id++ = zs;
+    *id++ = s4;
+  }
+
+  static const std::size_t SERIAL_LEN = 4 * 26;
+
+  // ---------- DEBUG ---------- //
 
   void report() const {
     std::cout << "Report of Internal Data in TerrainIndexer." << std::endl;

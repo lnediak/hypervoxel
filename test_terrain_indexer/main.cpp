@@ -102,7 +102,7 @@ hypervoxel::SliceDirs<5> randSliceDirs(RandFloat &randFloat,
   ret.um = randFloat() + 1.5;
 
   if (fixM) {
-    ret.fm = 20;
+    ret.fm = 256;
     ret.rm = 1.5;
     ret.um = 1.5;
   }
@@ -122,7 +122,7 @@ randViewable(std::mt19937 &mtrand, const hypervoxel::v::FVec<5> &p, int sidel) {
   return ret;
 }
 
-#define DO_INCCOORD5_TEST
+//#define DO_INCCOORD5_TEST
 int runTest(int numIndexers = 100000, int numPoints = 10000,
             bool usePyramid = true, int verbosity = 100,
             std::uint_fast32_t seed = 1) {
@@ -141,7 +141,7 @@ int runTest(int numIndexers = 100000, int numPoints = 10000,
     }
     auto lambda = [&]() -> float { return distro(mtrand); };
     // TODO: change true to false
-    hypervoxel::SliceDirs<5> sd = randSliceDirs(lambda, true);
+    hypervoxel::SliceDirs<5> sd = randSliceDirs(lambda, false);
     int sidel = iDist(mtrand);
     hypervoxel::TerrainIndexer ti(sd, sidel, usePyramid);
 
@@ -251,7 +251,7 @@ void printMaxSize(int numIndexers, bool usePyramid) {
 }
 
 int main() {
-  return runTest(10000, 1, false);
-  // printMaxSize(100000000, false);
+  return runTest(100000, 10000, false);
+  //printMaxSize(100000000, false);
 }
 

@@ -30,25 +30,26 @@ public:
   }
 
   void operator()() {
-    v::FVec<N> cp;             // current point
     v::IVec<N> cb = vfloor(c); // current block
-    float dist = 0;
     v::FVec<N> invs = 1.f / ray; // inverses
+    v::FVec<N> ainvs = v::vabs(invs);
+
     v::FVec<N> fsig1 = v::UnaryOp<float, N, FSign1, v::FVec<N>>(invs);
     v::IVec<N> fsig2 = v::UnaryOp<int, N, FSign2, v::FVec<N>>(invs);
+
+    v::FVec<N> tdists = (fsig1 + vint2float(cb) - c) * invs;
     int sigtmp = 0;
     EI<float> val{0.f, 0};
     while (true) {
-      cp = c + dist * ray;
       if (op(cb, val.b, sigtmp)) {
         return;
       }
-      val = vminI((fsig1 + vint2float(cb) - cp) * invs);
-      dist += ffmax(val.a, 1e-5f);
-      if (dist >= 1) {
+      val = vminI(tdists);
+      if (val.a >= 1) {
         break;
       }
       cb[val.b] += sigtmp = fsig2[val.b];
+      tdists[val.b] += ainvs[val.b];
     }
   }
 };

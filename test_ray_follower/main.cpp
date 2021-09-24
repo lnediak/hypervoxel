@@ -9,7 +9,7 @@ int main() {
     }
   } op;
   hypervoxel::SliceDirs<2> sd = {{0, 0}, {0, 1}, {1, 0}, {0, 0}, 10, 1, 1};
-  hypervoxel::RayFollower<2, Op &> rf(sd, op, -1, -2);
+  hypervoxel::RayFollower<2, Op &> rf(sd, op, -1, 2);
   rf();
 }
 

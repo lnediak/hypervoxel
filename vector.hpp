@@ -230,6 +230,11 @@ template <class T> struct NegU {
 };
 template <class T, std::size_t N, class A>
 using UnaryNeg = UnaryOp<T, N, NegU<T>, A>;
+template <class T> struct AbsU {
+  static T apply(T a) { return a > 0 ? a : -a; }
+};
+template <class T, std::size_t N, class A>
+using Abs = UnaryOp<T, N, AbsU<T>, A>;
 
 template <class T> struct MinU {
   static T apply(T a, T b) { return a > b ? b : a; }
@@ -309,6 +314,11 @@ template <class A, class B, class = typename rem_cvr<A>::thisisavvec,
               rem_cvr<A>::size == rem_cvr<B>::size>::type>
 typename A::value_type dist2(const A &a, const B &b) {
   return norm2(a - b);
+}
+
+template <class A, class = typename rem_cvr<A>::thisisavvec>
+Abs<typename A::value_type, A::size, A> vabs(const A &a) {
+  return {a};
 }
 
 // ----------------------VEC DEFINITION-----------------
