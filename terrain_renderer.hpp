@@ -9,11 +9,15 @@
 #include <memory>
 #include <sstream>
 
+#include "generator_perlin.hpp"
+#include "terrain_indexer.hpp"
+
 namespace hypervoxel {
 
 class TerrainRenderer {
 
   double rm, um, fm;
+  std::size_t width, height;
 
   cl::Platform plat;
   cl::Device devi;
@@ -26,19 +30,21 @@ class TerrainRenderer {
   std::unique_ptr<cl_float[]> tdsd;
   std::unique_ptr<cl_float16[]> dsd;
   cl::Buffer ftis, fti1, ds, d1;
-  cl::Buffer fsd;
+  cl::Buffer fsd, out;
 
   GeneratorPerlin<5> terGen;
 
-  static std::string getSource() const {
+  static std::string getSource() {
 #include "cl/cl_sources_all.inc"
-    return std::string((const char *)cl_cl_sources_all_cl,
-                       cl_cl_sources_all_cl_len);
+    return std::string((const char *)___cl_cl_sources_all_cl,
+                       ___cl_cl_sources_all_cl_len);
   }
 
 public:
-  TerrainRenderer(double rm, double um, double fm, GeneratorPerlin<5> &&terGen)
-      : rm(rm), um(um), fm(fm), terGen(terGen) {
+  TerrainRenderer(double rm, double um, double fm, std::size_t width,
+                  std::size_t height, GeneratorPerlin<5> &&terGen)
+      : rm(rm), um(um), fm(fm), width(width), height(height),
+        terGen(std::move(terGen)) {
     try {
       bool found = false;
       cl::vector<cl::Platform> platforms;
@@ -97,15 +103,17 @@ public:
 
       ftis = cl::Buffer(cont, CL_MEM_READ_ONLY, TerrainIndexer::SERIAL_LEN);
       fti1 = cl::Buffer(cont, CL_MEM_READ_ONLY, TerrainIndexer::SERIAL_LEN);
-      std::size_t dssz = 1048576; // TODO: PROPER SZ
+      std::size_t dssz = 20000000; // TODO: PROPER SZ
       tdsd.reset(new cl_float[dssz * 16]);
       dsd.reset(new cl_float16[dssz]);
       ds = cl::Buffer(cont, CL_MEM_READ_ONLY, dssz * sizeof(cl_float16));
-      d1 = cl::Buffer(cont, CL_MEM_WRITE_ONLY, /* ^^^ */ 400000000);
-      // TODO: REST OF BUFFERS, FOR renderTerrain AS WELL
+      d1 = cl::Buffer(cont, CL_MEM_READ_WRITE, /* ^^^ */ 410000000);
+
+      fsd = cl::Buffer(cont, CL_MEM_READ_ONLY, SliceDirs<5>::SERIAL_LEN);
+      out = cl::Buffer(cont, CL_MEM_WRITE_ONLY, width * height * 4);
     } catch (cl::Error e) {
       std::stringstream ss;
-      ss << "Well, well. " << err.err();
+      ss << "Well, well. " << e.err();
       throw std::runtime_error(ss.str());
     }
   }
@@ -153,50 +161,71 @@ public:
     return toreturn;
   }
 
-  void render(const SliceDirs<5> &sdi, int w, int h, unsigned char *img) {
-    // TODO: GENERATE ds
-    SliceDirs<5> sd = sdi;
-    SliceDirs<5> sds = sd;
-    sds.c /= TERGEN_CACHE_SCALE;
-    sds.fm /= TERGEN_CACHE_SCALE;
-    sd.fm = fm;
-    TerrainIndexer ttis(sds, 2, false);
-    std::size_t index = 0;
-    v::IVec<5> i5 = ttis.getI5(index);
-    v::IVec<5> coord = ttis.getCoord5(i5);
-    do {
-      tdsd[index++] = terGen.get(coord * TERGEN_CACHE_SCALE);
-    } while (ttis.incCoord5(coord, i5));
+  void render(const SliceDirs<5> &sdi, cl_uchar *img) {
+    try {
+      SliceDirs<5> sd = sdi;
+      sd.rm = rm;
+      sd.um = um;
+      sd.fm = fm;
+      SliceDirs<5> sds = sd;
+      sds.c /= TERGEN_CACHE_SCALE;
+      sds.fm /= TERGEN_CACHE_SCALE;
+      TerrainIndexer ttis(sds, 2, false);
+      std::size_t index = 0;
+      v::IVec<5> i5 = ttis.getI5(index);
+      v::IVec<5> coord = ttis.getCoord5(i5);
+      do {
+        /*float f = */ tdsd[index++] = terGen.get(coord * TERGEN_CACHE_SCALE);
+        // std::cout << "generated: " << f << std::endl;
+      } while (ttis.incCoord5(coord, i5));
 
-    TerrainIndexer tis(sds, 1, false);
-    index = 0;
-    i5 = tis.getI5(index);
-    coord = tis.getCoord5(i5);
-    do {
-      v::IVec<5> tcoord = coord - 1;
-      dsd[index++] = loadClFloat16(ttis, tcoord);
-      tcoord[4]++;
-      dsd[index++] = loadClFloat16(ttis, tcoord);
-    } while (tis.incCoord5(coord, i5));
-    queu.enqueueWriteBuffer(ds, CL_FALSE, 0, index * sizeof(cl_float16),
-                            dsd.get());
+      TerrainIndexer tis(sds, 1, false);
+      index = 0;
+      i5 = tis.getI5(0);
+      coord = tis.getCoord5(i5);
+      do {
+        v::IVec<5> tcoord = coord - 1;
+        /*cl_float16 why = */ dsd[index++] = generateClFloat16(ttis, tcoord);
+        // std::cout << "ds32[0] orig: " << v::FVec<16>(&why.s[0]) << std::endl;
+        tcoord[4]++;
+        dsd[index++] = generateClFloat16(ttis, tcoord);
+      } while (tis.incCoord5(coord, i5));
+      queu.enqueueWriteBuffer(ds, CL_FALSE, 0, index * sizeof(cl_float16),
+                              dsd.get());
 
-    cl_float tiserial[TerrainIndexer::SERIAL_LEN / sizeof(cl_float)];
-    tis.serialize(tiserial);
-    queu.enqueueWriteBuffer(ftis, CL_FALSE, 0, sizeof(tiserial), tiserial);
-    TerrainIndexer ti(sd, 1, false);
-    ti.serialize(tiserial);
-    queu.enqueueWriteBuffer(fti1, CL_FALSE, 0, sizeof(tiserial), tiserial);
+      cl_float tiserial[TerrainIndexer::SERIAL_LEN / 4];
+      tis.serialize(tiserial, (cl_int *)tiserial);
+      queu.enqueueWriteBuffer(ftis, CL_FALSE, 0, sizeof(tiserial), tiserial);
+      TerrainIndexer ti(sd, 1, false);
+      ti.serialize(tiserial, (cl_int *)tiserial);
+      queu.enqueueWriteBuffer(fti1, CL_FALSE, 0, sizeof(tiserial), tiserial);
 
-    lerpTerrain.setArg(0, (int)ti.getSize());
-    lerpTerrain.setArg(1, ftis);
-    lerpTerrain.setArg(2, fti1);
-    lerpTerrain.setArg(3, ds);
-    lerpTerrain.setArg(4, d1);
+      lerpTerrain.setArg(0, (int)ti.getSize());
+      lerpTerrain.setArg(1, ftis);
+      lerpTerrain.setArg(2, fti1);
+      lerpTerrain.setArg(3, ds);
+      lerpTerrain.setArg(4, d1);
+      queu.enqueueNDRangeKernel(
+          lerpTerrain, cl::NullRange,
+          cl::NDRange((ti.getSize() + 31) & ~(std::size_t)0x1F), cl::NullRange);
 
-    // TODO: READ lerpTerrain's result from d1
+      cl_float sdserial[SliceDirs<5>::SERIAL_LEN / 4];
+      serializeSliceDirs(sd, sdserial);
+      queu.enqueueWriteBuffer(fsd, CL_FALSE, 0, sizeof(sdserial), sdserial);
 
-    // TODO: USE renderTerrain
+      renderTerrain.setArg(0, fsd);
+      renderTerrain.setArg(1, fti1);
+      renderTerrain.setArg(2, d1);
+      renderTerrain.setArg(3, out);
+      queu.enqueueNDRangeKernel(renderTerrain, cl::NullRange,
+                                cl::NDRange(width, height), cl::NullRange);
+
+      queu.enqueueReadBuffer(out, CL_TRUE, 0, width * height * 4, img);
+    } catch (cl::Error e) {
+      std::stringstream ss;
+      ss << "Well, well. render here. " << e.what() << " " << e.err();
+      throw std::runtime_error(ss.str());
+    }
   }
 };
 

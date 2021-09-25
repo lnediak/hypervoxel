@@ -334,8 +334,7 @@ public:
 
   // ---------- FOR TRANSFERING TO OPENCL ---------- //
 
-  template <class cflt, class cint> void serialize(cflt *fd) {
-    cint *id = (cint *)fd;
+  template <class cflt, class cint> void serialize(cflt *fd, cint *id) {
     *id++ = d1;
     *id++ = d2;
     *id++ = d3;

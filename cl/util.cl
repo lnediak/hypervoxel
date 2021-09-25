@@ -7,6 +7,37 @@ typedef struct SliceDirs {
   float rm, um;   /// r multiplier, u multiplier (fov)
 } SliceDirs;
 
+// minus this function lol
+void initSliceDirs(SliceDirs *sd, __global const float *fsd) {
+  sd->c.s0 = *fsd++;
+  sd->c.s1 = *fsd++;
+  sd->c.s2 = *fsd++;
+  sd->c.s3 = *fsd++;
+  sd->c.s4 = *fsd++;
+
+  sd->r.s0 = *fsd++;
+  sd->r.s1 = *fsd++;
+  sd->r.s2 = *fsd++;
+  sd->r.s3 = *fsd++;
+  sd->r.s4 = *fsd++;
+
+  sd->u.s0 = *fsd++;
+  sd->u.s1 = *fsd++;
+  sd->u.s2 = *fsd++;
+  sd->u.s3 = *fsd++;
+  sd->u.s4 = *fsd++;
+
+  sd->f.s0 = *fsd++;
+  sd->f.s1 = *fsd++;
+  sd->f.s2 = *fsd++;
+  sd->f.s3 = *fsd++;
+  sd->f.s4 = *fsd++;
+
+  sd->fm = *fsd++;
+  sd->rm = *fsd++;
+  sd->um = *fsd++;
+}
+
 #define GETFLOOR_ENDIANESS_INDEX 0
 
 int fastFloor(float val) {

@@ -11,7 +11,25 @@ template <std::size_t N> struct SliceDirs {
   v::FVec<N> r, u, f; /// right, up, forward
   float fm;           /// forward multiplier (render distance)
   float rm, um;       /// r and u multipliers (at f dist. 1) (aspect ratio+fov)
+
+  static const std::size_t SERIAL_LEN = (N * 4 + 3) * 4;
 };
+
+template <std::size_t N, class cflt>
+void serializeSliceDirs(const SliceDirs<N> &sd, cflt *fsd) {
+  cflt *fsdr = fsd + N;
+  cflt *fsdu = fsdr + N;
+  cflt *fsdf = fsdu + N;
+  for (std::size_t i = 0; i < N; i++) {
+    *fsd++ = sd.c[i];
+    *fsdr++ = sd.r[i];
+    *fsdu++ = sd.u[i];
+    *fsdf++ = sd.f[i];
+  }
+  *fsdf++ = sd.fm;
+  *fsdf++ = sd.rm;
+  *fsdf++ = sd.um;
+}
 
 // ---------------------- ACTUAL UTILITY FUNCTIONS BELOW -----------------------
 

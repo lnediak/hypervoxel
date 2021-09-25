@@ -1,0 +1,5 @@
+*.o
+*gmon.out
+*cachegrind.out.*
+*callgrind.out.*
+

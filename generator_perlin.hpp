@@ -112,7 +112,7 @@ public:
       amplitude *= options.persistence;
       pos *= 2.;
     }
-    return total;
+    return total - 0.2;
   }
 };
 
