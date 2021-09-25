@@ -1,9 +1,0 @@
-*.o
-gmon.out
-callgrind.out.*
-basic_test
-chtbl_test
-
-cl/cl_sources_all.cl
-cl/cl_sources_all.inc
-
