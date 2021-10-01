@@ -31,6 +31,21 @@ void serializeSliceDirs(const SliceDirs<N> &sd, cflt *fsd) {
   *fsdf++ = sd.um;
 }
 
+template <class TI, class cflt>
+void serializeSliceDirs(const SliceDirs<5> &sd, const TI &ti, cflt *fsd) {
+  ti.serializeOrdered(&sd.c[0], fsd);
+  fsd += 5;
+  ti.serializeOrdered(&sd.r[0], fsd);
+  fsd += 5;
+  ti.serializeOrdered(&sd.u[0], fsd);
+  fsd += 5;
+  ti.serializeOrdered(&sd.f[0], fsd);
+  fsd += 5;
+  *fsd++ = sd.fm;
+  *fsd++ = sd.rm;
+  *fsd++ = sd.um;
+}
+
 // ---------------------- ACTUAL UTILITY FUNCTIONS BELOW -----------------------
 
 #define GETFLOOR_ENDIANESS_INDEX 0

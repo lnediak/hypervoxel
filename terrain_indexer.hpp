@@ -334,12 +334,13 @@ public:
 
   // ---------- FOR TRANSFERING TO OPENCL ---------- //
 
-  template <class cflt, class cint> void serialize(cflt *fd, cint *id) {
-    *id++ = d1;
-    *id++ = d2;
-    *id++ = d3;
-    *id++ = d4;
-    *id++ = d5;
+  template <class cflt, class cint> void serialize(cflt *fd, cint *id) const {
+    /*
+     *id++ = d1;
+     *id++ = d2;
+     *id++ = d3;
+     *id++ = d4;
+     *id++ = d5;*/
 
     fd = (cflt *)id;
     *fd++ = m4[0];
@@ -368,6 +369,17 @@ public:
     *id++ = zs;
     *id++ = s4;
   }
+
+  template <class T1, class T2>
+  void serializeOrdered(const T1 *in, T2 *out) const {
+    *out++ = in[d1];
+    *out++ = in[d2];
+    *out++ = in[d3];
+    *out++ = in[d4];
+    *out++ = in[d5];
+  }
+
+  v::IVec<5> getDs() const { return {d1, d2, d3, d4, d5}; }
 
   static const std::size_t SERIAL_LEN = 4 * 26;
 

@@ -1,10 +1,10 @@
 typedef struct TerrainIndexer {
 
-  int d1, d2, d3; /// isolated dimensions
-  int d4, d5;     /// other dimensions
-  float3 m4, m5;  /// row vectors for dotting
-  float3 b4, b5;  /// base vector offset for getting min
-  float o4, o5;   /// base vector offset to get final coord
+  // int d1, d2, d3; /// isolated dimensions
+  // int d4, d5;     /// other dimensions
+  float3 m4, m5; /// row vectors for dotting
+  float3 b4, b5; /// base vector offset for getting min
+  float o4, o5;  /// base vector offset to get final coord
 
   int3 cs;           /// starting coord in isolated dimensions
   size_t xs, ys, zs; /// x-stride, y-stride, z-stride
@@ -13,11 +13,11 @@ typedef struct TerrainIndexer {
 
 void initTerrainIndexer(TerrainIndexer *d, __global float *fd) {
   __global int *id = (__global int *)fd;
-  d->d1 = *id++;
+  /*d->d1 = *id++;
   d->d2 = *id++;
   d->d3 = *id++;
   d->d4 = *id++;
-  d->d5 = *id++;
+  d->d5 = *id++;*/
 
   fd = (__global float *)id;
   d->m4.s0 = *fd++;
@@ -67,14 +67,10 @@ void getV4cV5c(const TerrainIndexer *d, int v1, int v2, int v3, int *v4c,
 }
 
 size_t getIndex(const TerrainIndexer *d, int8 v) {
-  Int8NoScam vv;
-  vv.v = v;
   int v4c, v5c;
-  getV4cV5c(d, vv.s[d->d1], vv.s[d->d2], vv.s[d->d3], &v4c, &v5c);
-  size_t kek = (vv.s[d->d1] - d->cs.s0) * d->xs +
-               (vv.s[d->d2] - d->cs.s1) * d->ys +
-               (vv.s[d->d3] - d->cs.s2) * d->zs + (vv.s[d->d4] - v4c) * d->s4 +
-               (vv.s[d->d5] - v5c);
+  getV4cV5c(d, v.s0, v.s1, v.s2, &v4c, &v5c);
+  size_t kek = (v.s0 - d->cs.s0) * d->xs + (v.s1 - d->cs.s1) * d->ys +
+               (v.s2 - d->cs.s2) * d->zs + (v.s3 - v4c) * d->s4 + (v.s4 - v5c);
   return kek;
 }
 
@@ -89,15 +85,15 @@ int8 getI5(const TerrainIndexer *d, size_t i) {
 }
 
 int8 getCoord55(const TerrainIndexer *d, int8 i5) {
-  Int8NoScam ret;
-  int v1 = ret.s[d->d1] = i5.s0 + d->cs.s0;
-  int v2 = ret.s[d->d2] = i5.s1 + d->cs.s1;
-  int v3 = ret.s[d->d3] = i5.s2 + d->cs.s2;
+  int8 ret;
+  int v1 = ret.s0 = i5.s0 + d->cs.s0;
+  int v2 = ret.s1 = i5.s1 + d->cs.s1;
+  int v3 = ret.s2 = i5.s2 + d->cs.s2;
   int v4c, v5c;
   getV4cV5c(d, v1, v2, v3, &v4c, &v5c);
-  ret.s[d->d4] = i5.s3 + v4c;
-  ret.s[d->d5] = i5.s4 + v5c;
-  return ret.v;
+  ret.s3 = i5.s3 + v4c;
+  ret.s4 = i5.s4 + v5c;
+  return ret;
 }
 
 int8 getCoord5(const TerrainIndexer *d, size_t i) {

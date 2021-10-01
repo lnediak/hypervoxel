@@ -120,43 +120,44 @@ public:
 
 #define TERGEN_CACHE_SCALE 16
 
-  cl_float16 generateClFloat16(const TerrainIndexer &ttis, v::IVec<5> &c) {
+  cl_float16 generateClFloat16(const TerrainIndexer &ttis, const v::IVec<5> &ds,
+                               v::IVec<5> &c) {
     cl_float16 toreturn;
     toreturn.s[0] = tdsd[ttis.getIndex(c)];
-    c[0]++;
+    c[ds[0]]++;
     toreturn.s[1] = tdsd[ttis.getIndex(c)];
-    c[1]++;
+    c[ds[1]]++;
     toreturn.s[3] = tdsd[ttis.getIndex(c)];
-    c[0]--;
+    c[ds[0]]--;
     toreturn.s[2] = tdsd[ttis.getIndex(c)];
 
-    c[2]++;
+    c[ds[2]]++;
     toreturn.s[6] = tdsd[ttis.getIndex(c)];
-    c[0]++;
+    c[ds[0]]++;
     toreturn.s[7] = tdsd[ttis.getIndex(c)];
-    c[1]--;
+    c[ds[1]]--;
     toreturn.s[5] = tdsd[ttis.getIndex(c)];
-    c[0]--;
+    c[ds[0]]--;
     toreturn.s[4] = tdsd[ttis.getIndex(c)];
 
-    c[3]++;
+    c[ds[3]]++;
     toreturn.s[12] = tdsd[ttis.getIndex(c)];
-    c[0]++;
+    c[ds[0]]++;
     toreturn.s[13] = tdsd[ttis.getIndex(c)];
-    c[1]++;
+    c[ds[1]]++;
     toreturn.s[15] = tdsd[ttis.getIndex(c)];
-    c[0]--;
+    c[ds[0]]--;
     toreturn.s[14] = tdsd[ttis.getIndex(c)];
 
-    c[2]--;
+    c[ds[2]]--;
     toreturn.s[10] = tdsd[ttis.getIndex(c)];
-    c[0]++;
+    c[ds[0]]++;
     toreturn.s[11] = tdsd[ttis.getIndex(c)];
-    c[1]--;
+    c[ds[1]]--;
     toreturn.s[9] = tdsd[ttis.getIndex(c)];
-    c[0]--;
+    c[ds[0]]--;
     toreturn.s[8] = tdsd[ttis.getIndex(c)];
-    c[3]--;
+    c[ds[3]]--;
 
     return toreturn;
   }
@@ -185,10 +186,11 @@ public:
       coord = tis.getCoord5(i5);
       do {
         v::IVec<5> tcoord = coord - 1;
-        /*cl_float16 why = */ dsd[index++] = generateClFloat16(ttis, tcoord);
+        v::IVec<5> ttisds = ttis.getDs();
+        dsd[index++] = generateClFloat16(ttis, ttisds, tcoord);
         // std::cout << "ds32[0] orig: " << v::FVec<16>(&why.s[0]) << std::endl;
-        tcoord[4]++;
-        dsd[index++] = generateClFloat16(ttis, tcoord);
+        tcoord[ttisds[4]]++;
+        dsd[index++] = generateClFloat16(ttis, ttisds, tcoord);
       } while (tis.incCoord5(coord, i5));
       queu.enqueueWriteBuffer(ds, CL_FALSE, 0, index * sizeof(cl_float16),
                               dsd.get());
@@ -210,7 +212,7 @@ public:
           cl::NDRange((ti.getSize() + 31) & ~(std::size_t)0x1F), cl::NullRange);
 
       cl_float sdserial[SliceDirs<5>::SERIAL_LEN / 4];
-      serializeSliceDirs(sd, sdserial);
+      serializeSliceDirs(sd, ttis, sdserial);
       queu.enqueueWriteBuffer(fsd, CL_FALSE, 0, sizeof(sdserial), sdserial);
 
       renderTerrain.setArg(0, fsd);
